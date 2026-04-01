@@ -65,19 +65,24 @@ Para iniciar todos los servicios (Web, Mobile, Server) simultáneamente:
 pnpm dev
 ```
 
-### Base de Datos
+### Infraestructura y Persistencia
 
-Si realizas cambios en `apps/server/prisma/schema.prisma`, actualiza el cliente:
+*   **MongoDB Atlas:** Persistencia a largo plazo de jugadores, sesiones y movimientos.
+*   **Redis / Memory Fallback:** 
+    *   Si configuras `REDIS_URL` o `UPSTASH_REDIS_REST_*`, el sistema usará Redis para el estado de las partidas.
+    *   **Zero-Config Mode:** Si no hay Redis disponible, el servidor usará automáticamente la **RAM local (In-Memory)**. Esto es ideal para desarrollo rápido sin dependencias externas.
 
 ```bash
 cd apps/server
 npx prisma generate
 ```
 
-Puedes verificar la conexión con MongoDB usando el script de prueba:
-```bash
-pnpm test:db  # Ejecutable desde apps/server
-```
+### Persistencia y Base de Datos (Server)
+- **`apps/server/prisma/schema.prisma`**: Definición de modelos MongoDB Atlas.
+- **`apps/server/prisma/PrismaService.ts`**: Implementación de **Singleton** para `PrismaClient`.
+- **`apps/server/src/services/redis.service.ts`**: Servicio de estado con **Fallback In-Memory**. 
+  - Si la conexión a Redis falla, conmuta automáticamente a un `Map` interno.
+  - Soporta el mapeo automático de variables de Upstash (`UPSTASH_REDIS_REST_URL/TOKEN`) al protocolo TCP `rediss://`.
 
 ---
 
@@ -93,7 +98,3 @@ pnpm test:db  # Ejecutable desde apps/server
 Este proyecto utiliza **Husky** para asegurar que el código cumpla con los estándares antes de subir cambios. Cada commit ejecutará automáticamente los tests y el linter.
 
 ---
-
-## 📄 Licencia
-
-Este proyecto es privado y propiedad de **EngelAlexey**.
