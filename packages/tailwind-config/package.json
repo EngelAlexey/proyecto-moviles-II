@@ -1,0 +1,10 @@
+{
+  "name": "@dado-triple/tailwind-config",
+  "version": "1.0.0",
+  "private": true,
+  "main": "tailwind.config.ts",
+  "devDependencies": {
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}

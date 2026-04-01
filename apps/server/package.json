@@ -1,0 +1,40 @@
+{
+  "name": "@dado-triple/server",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "prisma generate || true && tsc",
+    "dev": "prisma generate && nodemon src/index.ts",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "prisma:generate": "prisma generate",
+    "test:db": "ts-node src/testConnection.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@dado-triple/game-logic": "workspace:*",
+    "@dado-triple/shared-types": "workspace:*",
+    "@prisma/client": "^6.19.2",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "ioredis": "latest",
+    "mongoose": "latest",
+    "socket.io": "latest"
+  },
+  "devDependencies": {
+    "@dado-triple/typescript-config": "workspace:*",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/jest": "^30.0.0",
+    "@types/node": "latest",
+    "jest": "^30.3.0",
+    "nodemon": "latest",
+    "prisma": "^6.19.2",
+    "socket.io-client": "^4.8.3",
+    "ts-jest": "^29.4.6",
+    "ts-node": "latest",
+    "typescript": "latest"
+  }
+}

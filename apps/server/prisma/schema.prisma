@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model PlayerModel {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  username   String   @unique
+  totalScore Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  sessions  GameSessionModel[] @relation(fields: [sessionIds], references: [id])
+  sessionIds String[]          @db.ObjectId
+
+  movements MovementModel[]
+
+  @@map("players")
+}
+
+model GameSessionModel {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  status    String    // "waiting" | "pairing" | "playing" | "finished"
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+
+  players   PlayerModel[] @relation(fields: [playerIds], references: [id])
+  playerIds String[]      @db.ObjectId
+
+  movements MovementModel[]
+
+  @@map("game_sessions")
+}
+
+model MovementModel {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  session     GameSessionModel @relation(fields: [sessionId], references: [id])
+  sessionId   String           @db.ObjectId
+
+  player      PlayerModel @relation(fields: [playerId], references: [id])
+  playerId    String      @db.ObjectId
+
+  diceValues  Int[]    // Tupla exacta de los 3 dados [d1, d2, d3]
+  comboType   String   // "triple" | "par" | "nada"
+  scoreEarned Int
+  timestamp   DateTime @default(now())
+
+  @@map("movements")
+}
+
+model TestRecord {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  message     String
+  author      String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("test_records")
+}

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx turbo:*)",
+      "Bash(npx jest:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

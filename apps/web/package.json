@@ -1,0 +1,34 @@
+{
+  "name": "@dado-triple/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "playwright test",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@dado-triple/game-logic": "workspace:*",
+    "@dado-triple/shared-types": "workspace:*",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "socket.io-client": "latest"
+  },
+  "devDependencies": {
+    "@dado-triple/tailwind-config": "workspace:*",
+    "@dado-triple/typescript-config": "workspace:*",
+    "@playwright/test": "^1.59.0",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}

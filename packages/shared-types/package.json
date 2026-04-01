@@ -1,0 +1,1 @@
+{"name":"@dado-triple/shared-types","version":"1.0.0","private":true,"main":"./dist/index.js","types":"./dist/index.d.ts","scripts":{"build":"tsc","dev":"tsc --watch"},"devDependencies":{"@dado-triple/typescript-config":"workspace:*","@types/node":"^25.5.0","typescript":"latest"}}

@@ -1,0 +1,9 @@
+{
+  "extends": "@dado-triple/typescript-config/node.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*.ts"]
+}
