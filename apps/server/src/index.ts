@@ -3,7 +3,7 @@ import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import { getPrismaClient, disconnectPrisma } from "../prisma/PrismaService.js";
+import { getPrismaClient, disconnectPrisma } from "./prisma/PrismaService.js";
 import { RedisService } from "./services/redis.service.js";
 import { GameCoordinator } from "./services/game-coordinator.js";
 import { SocketHandler } from "./services/socket-handler.js";

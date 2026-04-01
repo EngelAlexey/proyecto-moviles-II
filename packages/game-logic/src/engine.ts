@@ -7,7 +7,7 @@ import type {
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
-export const MIN_PLAYERS = 5;
+export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 10;
 const TRIPLE_BONUS = 100;
 const PAIR_BONUS = 50;

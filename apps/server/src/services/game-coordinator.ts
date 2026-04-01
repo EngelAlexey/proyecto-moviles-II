@@ -88,6 +88,13 @@ export class GameCoordinator {
       data: { playerIds: { push: dbPlayer.id } },
     });
 
+    // EVITAR DUPLICADOS en el estado de Redis (rejoin/refresh)
+    const existingPlayer = state.players.find((p) => p.name === playerName);
+    if (existingPlayer) {
+      console.log(`[GameCoordinator] Re-conectando jugador existente: ${playerName}`);
+      return { player: existingPlayer, state };
+    }
+
     const player: Player = {
       id: dbPlayer.id,
       name: playerName,
@@ -120,8 +127,16 @@ export class GameCoordinator {
   async tryStartGame(roomId: string): Promise<PairsAssignedPayload | null> {
     const state = await this.requireState(roomId);
 
-    if (state.players.length < MIN_PLAYERS) return null;
-    if (!state.players.every((p) => p.isReady)) return null;
+    if (state.players.length < MIN_PLAYERS) {
+      console.log(`[GameCoordinator] No hay suficientes jugadores en ${roomId} (actual: ${state.players.length})`);
+      return null;
+    }
+
+    const unreadyPlayers = state.players.filter((p) => !p.isReady).map((p) => p.name);
+    if (unreadyPlayers.length > 0) {
+      console.log(`[GameCoordinator] Esperando a: ${unreadyPlayers.join(", ")} en ${roomId}`);
+      return null;
+    }
 
     state.status = "playing";
     state.round = 1;
@@ -283,8 +298,26 @@ export class GameCoordinator {
 
   /** Obtiene el estado o lanza error si la sala no existe. */
   private async requireState(roomId: string): Promise<GameState> {
-    const state = await this.redis.getGameState(roomId);
+    let state = await this.redis.getGameState(roomId);
     if (!state) throw new Error(`Sala "${roomId}" no encontrada.`);
+
+    // SISTEMA DE AUTO-SANACIÓN (Deduplicación de jugadores corruptos en Redis)
+    const uniquePlayers: Player[] = [];
+    const seenIds = new Set<string>();
+
+    for (const p of state.players) {
+      if (!seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        uniquePlayers.push(p);
+      }
+    }
+
+    if (uniquePlayers.length !== state.players.length) {
+      console.log(`[GameCoordinator] Auto-sanación: Limpiando ${state.players.length - uniquePlayers.length} duplicados en ${roomId}`);
+      state.players = uniquePlayers;
+      await this.redis.saveGameState(roomId, state);
+    }
+
     return state;
   }
 
