@@ -1,6 +1,18 @@
 # 🎲 Dado Triple Monorepo
 
-Bienvenido al monorepo de **Dado Triple**, un sistema interactivo en tiempo real diseñado para juegos de azar y estrategia. Este proyecto utiliza una arquitectura de monorepo moderna, escalable y robusta para gestionar aplicaciones web, móviles y el servidor central.
+Bienvenido al monorepo de **Dado Triple**, un sistema interactivo en tiempo real diseñado para juegos de azar y estrategia. Este proyecto utiliza una arquitectura de monorepo moderna, escalable y robusta.
+
+## 📚 Documentación Técnica
+
+Para una comprensión profunda del sistema, revisa nuestras guías detalladas:
+
+- [🏗️ Arquitectura del Sistema](./docs/ARQUITECTURA.md): Stack, Monorepo y Persistencia.
+- [🎲 Reglas del Juego](./docs/REGLAS.md): Motor de puntajes y emparejamiento.
+- [⚙️ Guía de Instalación](./docs/SETUP.md): Requisitos y ejecución paso a paso.
+
+---
+
+## 🎲 Características Principales
 
 ## 🚀 Tecnologías Core
 
