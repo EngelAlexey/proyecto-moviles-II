@@ -13,10 +13,8 @@ model PlayerModel {
   totalScore Int      @default(0)
   createdAt  DateTime @default(now())
 
-  sessions  GameSessionModel[] @relation(fields: [sessionIds], references: [id])
-  sessionIds String[]          @db.ObjectId
-
-  movements MovementModel[]
+  // Relaciones manuales (Flat) para evitar transacciones en Atlas M0
+  sessionIds String[] @db.ObjectId
 
   @@map("players")
 }
@@ -27,10 +25,8 @@ model GameSessionModel {
   startTime DateTime  @default(now())
   endTime   DateTime?
 
-  players   PlayerModel[] @relation(fields: [playerIds], references: [id])
-  playerIds String[]      @db.ObjectId
-
-  movements MovementModel[]
+  // Relaciones manuales (Flat) para evitar transacciones en Atlas M0
+  playerIds String[] @db.ObjectId
 
   @@map("game_sessions")
 }
@@ -38,11 +34,9 @@ model GameSessionModel {
 model MovementModel {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
 
-  session     GameSessionModel @relation(fields: [sessionId], references: [id])
-  sessionId   String           @db.ObjectId
-
-  player      PlayerModel @relation(fields: [playerId], references: [id])
-  playerId    String      @db.ObjectId
+  // Relaciones manuales (Flat) para evitar transacciones en Atlas M0
+  sessionId   String   @db.ObjectId
+  playerId    String   @db.ObjectId
 
   diceValues  Int[]    // Tupla exacta de los 3 dados [d1, d2, d3]
   comboType   String   // "triple" | "par" | "nada"

@@ -21,6 +21,7 @@
     "dotenv": "latest",
     "express": "latest",
     "ioredis": "latest",
+    "@upstash/redis": "latest",
     "mongoose": "latest",
     "socket.io": "latest"
   },

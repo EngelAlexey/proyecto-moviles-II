@@ -1,4 +1,5 @@
-import Redis from "ioredis";
+import { Redis } from "ioredis";
+import { Redis as UpstashRedis } from "@upstash/redis";
 import type { GameState } from "@dado-triple/shared-types";
 
 const KEY_PREFIX = "game:";
@@ -53,7 +54,8 @@ class RedisStrategy implements GameStateRepository {
   constructor(url: string) {
     this.client = new Redis(url, {
       maxRetriesPerRequest: 1, // Fallback rápido
-      connectTimeout: 2000,   // 2 segundos para conectar
+      connectTimeout: 5000,   // Un poco más para Cloud
+      tls: url.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
       retryStrategy(times: number) {
         if (times > 1) return null; // No reintentar, delegar al fallback
         return 100;
@@ -92,6 +94,41 @@ class RedisStrategy implements GameStateRepository {
 }
 
 /**
+ * Estrategia Upstash (REST/HTTP) para entornos con restricciones de red (ISP/Firewall).
+ */
+class UpstashRestStrategy implements GameStateRepository {
+  private client: UpstashRedis;
+
+  constructor(url: string, token: string) {
+    this.client = new UpstashRedis({
+      url,
+      token,
+    });
+  }
+
+  async saveGameState(roomId: string, state: GameState): Promise<void> {
+    const key = `${KEY_PREFIX}${roomId}`;
+    await this.client.set(key, JSON.stringify(state), { ex: DEFAULT_TTL });
+  }
+
+  async getGameState(roomId: string): Promise<GameState | null> {
+    const key = `${KEY_PREFIX}${roomId}`;
+    const raw = await this.client.get<string | GameState>(key);
+    if (!raw) return null;
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  }
+
+  async deleteGameState(roomId: string): Promise<void> {
+    const key = `${KEY_PREFIX}${roomId}`;
+    await this.client.del(key);
+  }
+
+  async disconnect(): Promise<void> {
+    // REST no mantiene conexiones persistentes, no requiere quit()
+  }
+}
+
+/**
  * RedisService - Orquestador con Fallback In-Memory automático.
  * Intenta conectar a Redis, pero si falla, usa la RAM sin romper la aplicación.
  */
@@ -100,21 +137,21 @@ export class RedisService {
   private isUsingMemory: boolean = false;
 
   constructor() {
-    // 1. Prioridad: REDIS_URL (Formato rediss:// para TLS)
-    // 2. Mapeo: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN -> TCP URL
+    // 1. Prioridad: REDIS_URL (Formato rediss:// para TCP Local/Generic)
+    // 2. Mapeo: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN -> HTTP REST
     let redisUrl = process.env.REDIS_URL;
 
-    if (!redisUrl && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-      const host = process.env.UPSTASH_REDIS_REST_URL.replace("https://", "");
-      const pass = process.env.UPSTASH_REDIS_REST_TOKEN;
-      redisUrl = `rediss://default:${pass}@${host}:6379`;
-    }
-
-    if (redisUrl) {
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      console.log("[RedisService] Usando Upstash (REST/HTTP) para máxima estabilidad.");
+      this.repository = new UpstashRestStrategy(
+        process.env.UPSTASH_REDIS_REST_URL,
+        process.env.UPSTASH_REDIS_REST_TOKEN,
+      );
+    } else if (redisUrl) {
       this.repository = new RedisStrategy(redisUrl);
-      console.log("[RedisService] Intentando conectar a Redis Externo...");
+      console.log("[RedisService] Intentando conectar a Redis Externo (TCP)...");
       
-      // Verificación rápida de disponibilidad
+      // Verificación rápida de disponibilidad (solo para TCP)
       (this.repository as RedisStrategy).getClient().on("error", () => {
         if (!this.isUsingMemory) {
           this.switchToMemory();
@@ -172,6 +209,8 @@ export class RedisService {
 
   /** Informa si el sistema está operando en RAM o en Redis. */
   getStatus(): string {
-    return this.isUsingMemory ? "Memory (Local RAM)" : "Redis (Cloud)";
+    if (this.isUsingMemory) return "Memory (Local RAM)";
+    if (this.repository instanceof UpstashRestStrategy) return "Upstash (REST/HTTP)";
+    return "Redis (TCP Cloud)";
   }
 }
