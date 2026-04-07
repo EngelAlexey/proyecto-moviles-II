@@ -1,0 +1,11 @@
+{
+  "extends": "expo",
+  "ignorePatterns": [
+    "/node_modules",
+    "/.expo",
+    "/dist"
+  ],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off"
+  }
+}
