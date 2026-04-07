@@ -76,6 +76,26 @@ export enum SocketEvents {
   ERROR = "error",
 }
 
+export const CLIENT_SOCKET_EVENTS = [
+  SocketEvents.JOIN_GAME,
+  SocketEvents.PLAYER_READY,
+  SocketEvents.ROLL_DICE,
+] as const;
+
+export const SERVER_SOCKET_EVENTS = [
+  SocketEvents.PLAYER_JOINED,
+  SocketEvents.PLAYER_LEFT,
+  SocketEvents.GAME_START,
+  SocketEvents.PAIRS_ASSIGNED,
+  SocketEvents.DICE_ROLLED,
+  SocketEvents.ROUND_RESULT,
+  SocketEvents.GAME_UPDATE,
+  SocketEvents.GAME_OVER,
+  SocketEvents.ERROR,
+] as const;
+
+export type RealtimeTransport = "socket.io" | "websocket";
+
 // ─── Payloads de eventos ─────────────────────────────────────────────────────
 
 /** Cliente envía al unirse. */
@@ -126,4 +146,71 @@ export interface GameOverPayload {
 export interface ErrorPayload {
   message: string;
   code?: string;
+}
+
+export interface ClientSocketEventMap {
+  [SocketEvents.JOIN_GAME]: JoinGamePayload & { roomId: string };
+  [SocketEvents.PLAYER_READY]: { roomId: string; playerId: string };
+  [SocketEvents.ROLL_DICE]: { roomId: string; playerId: string };
+}
+
+export interface ServerSocketEventMap {
+  [SocketEvents.PLAYER_JOINED]: PlayerJoinedPayload;
+  [SocketEvents.PLAYER_LEFT]: { playerId: string };
+  [SocketEvents.GAME_START]: Record<string, never>;
+  [SocketEvents.PAIRS_ASSIGNED]: PairsAssignedPayload;
+  [SocketEvents.DICE_ROLLED]: DiceRolledPayload;
+  [SocketEvents.ROUND_RESULT]: RoundResultPayload;
+  [SocketEvents.GAME_UPDATE]: GameUpdatePayload;
+  [SocketEvents.GAME_OVER]: GameOverPayload;
+  [SocketEvents.ERROR]: ErrorPayload;
+}
+
+export type ClientSocketEvent = keyof ClientSocketEventMap;
+export type ServerSocketEvent = keyof ServerSocketEventMap;
+
+type SocketMessageFor<EventMap, Event extends keyof EventMap> = {
+  event: Event;
+  payload: EventMap[Event];
+};
+
+export type ClientSocketMessage = {
+  [Event in keyof ClientSocketEventMap]: SocketMessageFor<ClientSocketEventMap, Event>;
+}[keyof ClientSocketEventMap];
+
+export type ServerSocketMessage = {
+  [Event in keyof ServerSocketEventMap]: SocketMessageFor<ServerSocketEventMap, Event>;
+}[keyof ServerSocketEventMap];
+
+export type SocketMessage = ClientSocketMessage | ServerSocketMessage;
+
+export function serializeSocketMessage(message: SocketMessage): string {
+  return JSON.stringify(message);
+}
+
+export function parseSocketMessage(raw: string): SocketMessage | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (!isSocketMessage(parsed)) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function isSocketMessage(value: unknown): value is SocketMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.event === "string" &&
+    Object.values(SocketEvents).includes(candidate.event as SocketEvents) &&
+    "payload" in candidate
+  );
 }

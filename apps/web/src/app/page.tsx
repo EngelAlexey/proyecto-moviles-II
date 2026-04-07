@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
 import {
   SocketEvents,
   type GameState,
@@ -12,9 +11,18 @@ import {
   type GameUpdatePayload,
   type GameOverPayload,
   type ErrorPayload,
+  type RealtimeTransport,
 } from '@dado-triple/shared-types';
+import {
+  createRealtimeClient,
+  type RealtimeClient,
+} from '@/lib/realtime-client';
 
-const SERVER_URL = 'http://localhost:4000';
+const REALTIME_TRANSPORT: RealtimeTransport =
+  process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === 'websocket' ? 'websocket' : 'socket.io';
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_REALTIME_URL ??
+  (REALTIME_TRANSPORT === 'websocket' ? 'ws://localhost:5000' : 'http://localhost:4000');
 const ROOM_ID = 'debug-room';
 
 function timestamp(): string {
@@ -22,9 +30,9 @@ function timestamp(): string {
 }
 
 export default function DebugWebPage() {
-  // ── Estado ──────────────────────────────────────────────────────────────
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -36,78 +44,72 @@ export default function DebugWebPage() {
     setLogs((prev) => [...prev, `[${timestamp()}] ${entry}`]);
   }, []);
 
-  // ── Conexión y Listeners ────────────────────────────────────────────────
   useEffect(() => {
-    const s = io(SERVER_URL, {
-      transports: ['websocket'],
-      autoConnect: true,
+    const client = createRealtimeClient({
+      url: SERVER_URL,
+      transport: REALTIME_TRANSPORT,
+      onOpen: ({ connectionId: nextConnectionId, transport }) => {
+        setIsConnected(true);
+        setConnectionId(nextConnectionId);
+        addLog(`CONECTADO via ${transport}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`);
+      },
+      onClose: ({ reason, transport }) => {
+        setIsConnected(false);
+        setConnectionId(null);
+        addLog(`DESCONECTADO via ${transport}: ${reason ?? 'sin detalle'}`);
+      },
+      onError: (message) => {
+        addLog(`ERROR DE CONEXION: ${message}`);
+      },
     });
 
-    s.on('connect', () => {
-      setIsConnected(true);
-      addLog(`CONECTADO (id: ${s.id})`);
-    });
+    const unsubscribers = [
+      client.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
+        addLog(`PLAYER_JOINED: ${data.player.name} (total: ${data.totalPlayers})`);
+      }),
+      client.on(SocketEvents.PLAYER_LEFT, (data: { playerId: string }) => {
+        addLog(`PLAYER_LEFT: ${data.playerId}`);
+      }),
+      client.on(SocketEvents.GAME_START, () => {
+        addLog('GAME_START');
+      }),
+      client.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
+        const pairStr = data.pairs
+          .map((p) => `${p.player1Id} vs ${p.player2Id}`)
+          .join(', ');
+        addLog(`PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`);
+      }),
+      client.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
+        addLog(`DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`);
+      }),
+      client.on(SocketEvents.ROUND_RESULT, (data: RoundResultPayload) => {
+        addLog(`ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} -> ganador: ${data.winnerId ?? 'empate'}`);
+      }),
+      client.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
+        setGameState(data.state);
+        addLog(`GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`);
+      }),
+      client.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
+        addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
+      }),
+      client.on(SocketEvents.ERROR, (data: ErrorPayload) => {
+        addLog(`ERROR: ${data.message}${data.code ? ` (${data.code})` : ''}`);
+      }),
+    ];
 
-    s.on('disconnect', (reason) => {
-      setIsConnected(false);
-      addLog(`DESCONECTADO: ${reason}`);
-    });
-
-    // ── Eventos del juego ─────────────────────────────────────────────
-    s.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
-      addLog(`PLAYER_JOINED: ${data.player.name} (total: ${data.totalPlayers})`);
-    });
-
-    s.on(SocketEvents.PLAYER_LEFT, (data: { playerId: string }) => {
-      addLog(`PLAYER_LEFT: ${data.playerId}`);
-    });
-
-    s.on(SocketEvents.GAME_START, () => {
-      addLog('GAME_START');
-    });
-
-    s.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
-      const pairStr = data.pairs
-        .map((p) => `${p.player1Id} vs ${p.player2Id}`)
-        .join(', ');
-      addLog(`PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`);
-    });
-
-    s.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
-      addLog(`DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`);
-    });
-
-    s.on(SocketEvents.ROUND_RESULT, (data: RoundResultPayload) => {
-      addLog(`ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} → ganador: ${data.winnerId ?? 'empate'}`);
-    });
-
-    s.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
-      setGameState(data.state);
-      addLog(`GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`);
-    });
-
-    s.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
-      addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
-    });
-
-    s.on(SocketEvents.ERROR, (data: ErrorPayload) => {
-      addLog(`ERROR: ${data.message}${data.code ? ` (${data.code})` : ''}`);
-    });
-
-    setSocket(s);
+    client.connect();
+    setSocket(client);
 
     return () => {
-      s.removeAllListeners();
-      s.close();
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      client.disconnect(1000, 'Component unmounted');
     };
   }, [addLog]);
 
-  // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Derivar playerId del gameState
   useEffect(() => {
     if (!gameState || !username.trim()) return;
     const me = gameState.players.find((p) => p.name === username.trim());
@@ -117,39 +119,35 @@ export default function DebugWebPage() {
     }
   }, [gameState, username, playerId, addLog]);
 
-  // ── Acciones ────────────────────────────────────────────────────────────
   const joinGame = () => {
     if (!socket || !username.trim()) return;
-    socket.emit(SocketEvents.JOIN_GAME, { playerName: username.trim(), roomId: ROOM_ID });
-    addLog(`→ JOIN_GAME emitido (username: ${username.trim()})`);
+    socket.send(SocketEvents.JOIN_GAME, { playerName: username.trim(), roomId: ROOM_ID });
+    addLog(`-> JOIN_GAME emitido (username: ${username.trim()})`);
   };
 
   const markReady = () => {
     if (!socket || !playerId) return;
-    socket.emit(SocketEvents.PLAYER_READY, { roomId: ROOM_ID, playerId });
-    addLog('→ PLAYER_READY emitido');
+    socket.send(SocketEvents.PLAYER_READY, { roomId: ROOM_ID, playerId });
+    addLog('-> PLAYER_READY emitido');
   };
 
   const rollDice = () => {
     if (!socket || !playerId) return;
-    socket.emit(SocketEvents.ROLL_DICE, { roomId: ROOM_ID, playerId });
-    addLog('→ ROLL_DICE emitido');
+    socket.send(SocketEvents.ROLL_DICE, { roomId: ROOM_ID, playerId });
+    addLog('-> ROLL_DICE emitido');
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#1a1a2e] text-white p-6 font-sans">
       <header className="mb-6 text-center">
-        <h1 className="text-3xl font-bold text-primary mb-2">Dado Triple — Web Debug Console</h1>
+        <h1 className="text-3xl font-bold text-primary mb-2">Dado Triple - Web Debug Console</h1>
         <div className={`inline-block px-4 py-1 rounded-full text-xs font-mono ${isConnected ? 'bg-green-900/50 text-green-400 border border-green-700' : 'bg-red-900/50 text-red-400 border border-red-700'}`}>
-          SOCKET: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | ID: {socket?.id ?? '—'}
+          SOCKET: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | MODO: {REALTIME_TRANSPORT.toUpperCase()} | ID: {connectionId ?? '-'}
         </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto">
-        {/* Columna Izquierda: Conexión y Controles */}
         <div className="space-y-6">
-          {/* SECCIÓN 1: CONEXIÓN */}
           <section className="bg-[#16213e] p-5 rounded-xl border border-gray-800">
             <h2 className="text-[#e94560] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="bg-[#e94560] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
@@ -173,7 +171,6 @@ export default function DebugWebPage() {
             </div>
           </section>
 
-          {/* SECCIÓN 2: CONTROLES */}
           {isConnected && playerId && (
             <section className="bg-[#16213e] p-5 rounded-xl border border-gray-800 animate-in fade-in duration-500">
               <h2 className="text-[#e94560] font-bold text-lg mb-4 flex items-center gap-2">
@@ -197,19 +194,17 @@ export default function DebugWebPage() {
             </section>
           )}
 
-          {/* SECCIÓN 3: ESTADO CRUDO */}
           <section className="bg-[#16213e] p-5 rounded-xl border border-gray-800 h-[300px] flex flex-col">
             <h2 className="text-[#e94560] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="bg-[#e94560] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
               GameState (raw)
             </h2>
             <div className="bg-[#0a0a1a] rounded-lg p-4 flex-1 overflow-auto font-mono text-[11px] text-green-500 border border-black scrollbar-hide">
-              <pre>{gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aún)'}</pre>
+              <pre>{gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aun)'}</pre>
             </div>
           </section>
         </div>
 
-        {/* Columna Derecha: Logs */}
         <section className="bg-[#16213e] p-5 rounded-xl border border-gray-800 flex flex-col h-[650px]">
           <h2 className="text-[#e94560] font-bold text-lg mb-4 flex items-center gap-2">
             <span className="bg-[#e94560] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">4</span>

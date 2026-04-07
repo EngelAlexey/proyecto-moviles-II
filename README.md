@@ -19,7 +19,7 @@ Para una comprensión profunda del sistema, revisa nuestras guías detalladas:
 Este proyecto está construido con un stack de vanguardia:
 
 *   **Monorepo:** [Turborepo](https://turbo.build/) con [pnpm](https://pnpm.io/) para una gestión de espacios de trabajo eficiente.
-*   **Backend:** Node.js, Express, Socket.io, Redis e [ioredis](https://github.com/luin/ioredis).
+*   **Backend:** Node.js, Express, Redis e [ioredis](https://github.com/luin/ioredis), con bridge temporal de Socket.IO y contrato preparado para WebSocket nativo/Rust.
 *   **Persistencia:** [Prisma ORM](https://www.prisma.io/) (v6 Stable) y MongoDB Atlas.
 *   **Frontend Web:** [Next.js](https://nextjs.org/) (App Router) y TailwindCSS.
 *   **Frontend Móvil:** [React Native](https://reactnative.dev/) mediante [Expo](https://expo.dev/) y NativeWind.
@@ -33,7 +33,7 @@ Este proyecto está construido con un stack de vanguardia:
 ```text
 .
 ├── apps/
-│   ├── server/          # API REST + WebSocket (Socket.io)
+│   ├── server/          # API REST + tiempo real (Socket.IO bridge + contrato WebSocket)
 │   ├── web/             # Aplicación Next.js (Dashboard/App Web)
 │   └── mobile/          # Aplicación Expo (iOS/Android)
 ├── packages/
@@ -75,6 +75,25 @@ Para iniciar todos los servicios (Web, Mobile, Server) simultáneamente:
 
 ```bash
 pnpm dev
+```
+
+### Cambio de transporte en tiempo real
+
+Web y Mobile ahora soportan dos modos:
+
+*   **`socket.io`**: compatibilidad con el servidor Node actual.
+*   **`websocket`**: modo listo para el servidor WebSocket que el equipo integrara en Rust.
+
+Variables recomendadas:
+
+```env
+# apps/web/.env.local
+NEXT_PUBLIC_REALTIME_TRANSPORT=websocket
+NEXT_PUBLIC_REALTIME_URL=ws://localhost:5000
+
+# apps/mobile/.env
+EXPO_PUBLIC_REALTIME_TRANSPORT=websocket
+EXPO_PUBLIC_REALTIME_URL=ws://10.0.2.2:5000
 ```
 
 ### Infraestructura y Persistencia

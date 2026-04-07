@@ -8,7 +8,6 @@ import {
   SafeAreaView,
   StyleSheet,
 } from 'react-native';
-import { io, Socket } from 'socket.io-client';
 import {
   SocketEvents,
   type GameState,
@@ -19,13 +18,18 @@ import {
   type GameUpdatePayload,
   type GameOverPayload,
   type ErrorPayload,
+  type RealtimeTransport,
 } from '@dado-triple/shared-types';
+import {
+  createRealtimeClient,
+  type RealtimeClient,
+} from './src/lib/realtime-client';
 
-/**
- * 💡 TIP: Si pruebas en un dispositivo físico, cambia 'localhost' por la IP local de tu PC 
- * (ej: 'http://192.168.1.100:4000'). Si usas emulador Android, usa 'http://10.0.2.2:4000'.
- */
-const SERVER_URL = 'http://localhost:4000'; 
+const REALTIME_TRANSPORT: RealtimeTransport =
+  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'websocket' ? 'websocket' : 'socket.io';
+const SERVER_URL =
+  process.env.EXPO_PUBLIC_REALTIME_URL ??
+  (REALTIME_TRANSPORT === 'websocket' ? 'ws://10.0.2.2:5000' : 'http://10.0.2.2:4000');
 const ROOM_ID = 'debug-room';
 
 function timestamp(): string {
@@ -33,9 +37,9 @@ function timestamp(): string {
 }
 
 export default function App() {
-  // ── Estado ──────────────────────────────────────────────────────────────
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -47,99 +51,90 @@ export default function App() {
     setLogs((prev) => [...prev, `[${timestamp()}] ${entry}`]);
   }, []);
 
-  // ── Conexión y Listeners ────────────────────────────────────────────────
   useEffect(() => {
-    const s = io(SERVER_URL, {
-      transports: ['websocket'],
-      autoConnect: true,
+    const client = createRealtimeClient({
+      url: SERVER_URL,
+      transport: REALTIME_TRANSPORT,
+      onOpen: ({ connectionId: nextConnectionId, transport }) => {
+        setIsConnected(true);
+        setConnectionId(nextConnectionId);
+        addLog(`CONECTADO via ${transport}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`);
+      },
+      onClose: ({ reason, transport }) => {
+        setIsConnected(false);
+        setConnectionId(null);
+        addLog(`DESCONECTADO via ${transport}: ${reason ?? 'sin detalle'}`);
+      },
+      onError: (message) => {
+        addLog(`ERROR DE CONEXION: ${message}`);
+      },
     });
 
-    s.on('connect', () => {
-      setIsConnected(true);
-      addLog(`CONECTADO (id: ${s.id})`);
-    });
+    const unsubscribers = [
+      client.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
+        addLog(`PLAYER_JOINED: ${data.player.name} (total: ${data.totalPlayers})`);
+      }),
+      client.on(SocketEvents.PLAYER_LEFT, (data: { playerId: string }) => {
+        addLog(`PLAYER_LEFT: ${data.playerId}`);
+      }),
+      client.on(SocketEvents.GAME_START, () => {
+        addLog('GAME_START');
+      }),
+      client.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
+        const pairStr = data.pairs
+          .map((p) => `${p.player1Id} vs ${p.player2Id}`)
+          .join(', ');
+        addLog(`PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`);
+      }),
+      client.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
+        addLog(`DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`);
+      }),
+      client.on(SocketEvents.ROUND_RESULT, (data: RoundResultPayload) => {
+        addLog(`ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} -> ganador: ${data.winnerId ?? 'empate'}`);
+      }),
+      client.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
+        setGameState(data.state);
+        addLog(`GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`);
+      }),
+      client.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
+        addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
+      }),
+      client.on(SocketEvents.ERROR, (data: ErrorPayload) => {
+        addLog(`ERROR: ${data.message}${data.code ? ` (${data.code})` : ''}`);
+      }),
+    ];
 
-    s.on('disconnect', (reason: string) => {
-      setIsConnected(false);
-      addLog(`DESCONECTADO: ${reason}`);
-    });
-
-    // ── Eventos del juego ─────────────────────────────────────────────
-
-    s.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
-      addLog(`PLAYER_JOINED: ${data.player.name} (total: ${data.totalPlayers})`);
-    });
-
-    s.on(SocketEvents.PLAYER_LEFT, (data: { playerId: string }) => {
-      addLog(`PLAYER_LEFT: ${data.playerId}`);
-    });
-
-    s.on(SocketEvents.GAME_START, () => {
-      addLog('GAME_START');
-    });
-
-    s.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
-      const pairStr = data.pairs
-        .map((p) => `${p.player1Id} vs ${p.player2Id}`)
-        .join(', ');
-      addLog(`PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`);
-    });
-
-    s.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
-      addLog(`DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`);
-    });
-
-    s.on(SocketEvents.ROUND_RESULT, (data: RoundResultPayload) => {
-      addLog(`ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} → ganador: ${data.winnerId ?? 'empate'}`);
-    });
-
-    s.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
-      setGameState(data.state);
-      addLog(`GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`);
-    });
-
-    s.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
-      addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
-    });
-
-    s.on(SocketEvents.ERROR, (data: ErrorPayload) => {
-      addLog(`ERROR: ${data.message}${data.code ? ` (${data.code})` : ''}`);
-    });
-
-    setSocket(s);
+    client.connect();
+    setSocket(client);
 
     return () => {
-      s.removeAllListeners();
-      s.close();
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      client.disconnect(1000, 'Component unmounted');
     };
   }, [addLog]);
 
-  // Auto-scroll logs
   useEffect(() => {
     logsRef.current?.scrollToEnd({ animated: true });
   }, [logs]);
 
-  // ── Acciones ────────────────────────────────────────────────────────────
-
   const joinGame = () => {
     if (!socket || !username.trim()) return;
-    socket.emit(SocketEvents.JOIN_GAME, { playerName: username.trim(), roomId: ROOM_ID });
-    addLog(`→ JOIN_GAME emitido (username: ${username.trim()})`);
+    socket.send(SocketEvents.JOIN_GAME, { playerName: username.trim(), roomId: ROOM_ID });
+    addLog(`-> JOIN_GAME emitido (username: ${username.trim()})`);
   };
 
   const markReady = () => {
     if (!socket || !playerId) return;
-    socket.emit(SocketEvents.PLAYER_READY, { roomId: ROOM_ID, playerId });
-    addLog('→ PLAYER_READY emitido');
+    socket.send(SocketEvents.PLAYER_READY, { roomId: ROOM_ID, playerId });
+    addLog('-> PLAYER_READY emitido');
   };
 
   const rollDice = () => {
     if (!socket || !playerId) return;
-    socket.emit(SocketEvents.ROLL_DICE, { roomId: ROOM_ID, playerId });
-    addLog('→ ROLL_DICE emitido');
+    socket.send(SocketEvents.ROLL_DICE, { roomId: ROOM_ID, playerId });
+    addLog('-> ROLL_DICE emitido');
   };
 
-  // Derivar playerId del gameState cuando el jugador se une
   useEffect(() => {
     if (!gameState || !username.trim()) return;
     const me = gameState.players.find((p) => p.name === username.trim());
@@ -149,16 +144,13 @@ export default function App() {
     }
   }, [gameState, username, playerId, addLog]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
-
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Dado Triple — Debug UI</Text>
+      <Text style={styles.title}>Dado Triple - Debug UI</Text>
       <Text style={styles.status}>
-        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | ID: {socket?.id ?? '—'}
+        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Modo: {REALTIME_TRANSPORT.toUpperCase()} | ID: {connectionId ?? '-'}
       </Text>
 
-      {/* ── Sección 1: Conexión ──────────────────────────────────────── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>1. Unirse</Text>
         <TextInput
@@ -172,7 +164,6 @@ export default function App() {
         <Button title="Unirse al Juego" onPress={joinGame} disabled={!isConnected || !username.trim()} />
       </View>
 
-      {/* ── Sección 2: Controles de Juego ────────────────────────────── */}
       {isConnected && playerId && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>2. Controles</Text>
@@ -187,17 +178,15 @@ export default function App() {
         </View>
       )}
 
-      {/* ── Sección 3: Estado Crudo ──────────────────────────────────── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>3. GameState (raw)</Text>
         <ScrollView style={styles.rawBox} nestedScrollEnabled>
           <Text style={styles.mono}>
-            {gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aún)'}
+            {gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aun)'}
           </Text>
         </ScrollView>
       </View>
 
-      {/* ── Sección 4: Logs ──────────────────────────────────────────── */}
       <View style={[styles.section, styles.logsSection]}>
         <Text style={styles.sectionTitle}>4. Event Logs ({logs.length})</Text>
         <ScrollView ref={logsRef} style={styles.rawBox} nestedScrollEnabled>
@@ -213,8 +202,6 @@ export default function App() {
     </SafeAreaView>
   );
 }
-
-// ── Estilos mínimos ──────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {

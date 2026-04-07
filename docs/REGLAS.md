@@ -32,7 +32,7 @@ Cada jugador lanza **3 dados** (valores 1-6). Los puntos se calculan según la c
 > - [1, 2, 3]: 6 puntos.
 
 ### 4. Ciclo de Vida de la Partida
-1. **Unirse:** Los jugadores ingresan a la sala vía Socket.io.
+1. **Unirse:** Los jugadores ingresan a la sala mediante el canal de tiempo real configurado (`socket.io` legado o `websocket`).
 2. **Listo:** Todos confirman su preparación.
 3. **Playing:** El estado cambia y se generan las parejas.
 4. **Lanzar:** Cada jugador presiona el botón y el servidor calcula su puntaje.

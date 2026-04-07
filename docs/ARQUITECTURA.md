@@ -12,7 +12,7 @@ El proyecto utiliza una arquitectura de **Monorepo** moderna para mantener la co
 ### 1. Backend (`apps/server`)
 Servidor central robusto encargado de la lógica de negocio y estado en tiempo real.
 - **Framework:** Node.js + Express.
-- **Tiempo Real:** Socket.io para comunicación bidireccional de baja latencia.
+- **Tiempo Real:** Contrato compartido para WebSocket nativo, con un adaptador temporal de Socket.IO mientras se integra el servidor en Rust.
 - **Motor de Juego:** `GameCoordinator` que orquestra el ciclo de vida de cada sesión.
 
 ### 2. Persistencia Híbrida
@@ -30,8 +30,8 @@ El sistema utiliza una estrategia de almacenamiento de dos niveles para maximiza
 - **`typescript-config`:** Configuraciones base de TS compartidas.
 
 ## Flujo de Comunicación
-1. El cliente inicia un evento vía **Socket.io** (ej. `JOIN_GAME`).
-2. El `SocketHandler` delega en el `GameCoordinator`.
+1. El cliente envia un mensaje de tiempo real con el formato `{ event, payload }`.
+2. El transporte activo (`socket.io` legado o `websocket`) delega el evento al `RealtimeEventService`.
 3. El estado se recupera y actualiza en **Redis**.
 4. Se dispara un guardado asíncrono ("fire-and-forget") a **MongoDB** para telemetría y persistencia.
 5. El servidor emite `GAME_UPDATE` a todos los jugadores de la sala con el nuevo estado.

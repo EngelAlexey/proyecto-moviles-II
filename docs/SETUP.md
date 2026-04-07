@@ -44,6 +44,22 @@ pnpm dev
 - **Servidor API/Socket:** [http://localhost:4000](http://localhost:4000)
 - **Móvil (Metro):** Escanea el código QR de Expo en tu terminal.
 
+### 6. Cambiar a WebSocket para Rust
+
+Cuando el servidor en Rust este disponible, activa el modo `websocket`:
+
+```env
+# apps/web/.env.local
+NEXT_PUBLIC_REALTIME_TRANSPORT=websocket
+NEXT_PUBLIC_REALTIME_URL=ws://localhost:5000
+
+# apps/mobile/.env
+EXPO_PUBLIC_REALTIME_TRANSPORT=websocket
+EXPO_PUBLIC_REALTIME_URL=ws://10.0.2.2:5000
+```
+
+Si necesitas seguir usando el backend actual de Node, deja `socket.io` como transporte o simplemente omite esas variables.
+
 ## Consejos de Desarrollo
 - **Zero-Config Redis:** Si no configuras `REDIS_URL` en el `.env`, el servidor activará automáticamente el modo de respaldo en memoria RAM para facilitar pruebas locales.
 - **Deduplicación:** El servidor cuenta con un sistema de auto-sanación que limpia a los jugadores duplicados en cada interacción.
