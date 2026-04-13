@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { prisma } from '../prisma/PrismaService';
+import { prisma } from './prisma/PrismaService.js';
 
 /**
  * Script de prueba para verificar la conexión a MongoDB Atlas vía Prisma.
