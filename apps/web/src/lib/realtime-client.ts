@@ -72,17 +72,10 @@ function createRegistry() {
 }
 
 export function createRealtimeClient(options: CreateRealtimeClientOptions): RealtimeClient {
-  if (typeof window !== 'undefined' && window.__DADO_REALTIME_CLIENT_FACTORY__) {
-    return window.__DADO_REALTIME_CLIENT_FACTORY__(options);
-  }
-
   const registry = createRegistry();
 
-  if (options.transport === 'websocket') {
-    return createWebSocketClient(options, registry);
-  }
-
-  return createSocketIoClient(options, registry);
+  
+  return createWebSocketClient(options, registry);
 }
 
 function createSocketIoClient(

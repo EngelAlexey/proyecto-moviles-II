@@ -18,11 +18,8 @@ import {
   type RealtimeClient,
 } from '@/lib/realtime-client';
 
-const REALTIME_TRANSPORT: RealtimeTransport =
-  process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === 'websocket' ? 'websocket' : 'socket.io';
-const SERVER_URL =
-  process.env.NEXT_PUBLIC_REALTIME_URL ??
-  (REALTIME_TRANSPORT === 'websocket' ? 'ws://localhost:5000' : 'http://localhost:4000');
+const REALTIME_TRANSPORT: RealtimeTransport = 'websocket';
+const SERVER_URL = 'ws://3.18.110.24:5000';
 const ROOM_ID = 'debug-room';
 
 function timestamp(): string {
