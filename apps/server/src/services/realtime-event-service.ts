@@ -88,7 +88,7 @@ export class RealtimeEventService {
     const { roomId, playerName } = payload;
 
     let state = await this.coordinator.getState(roomId);
-    if (!state) {
+    if (!state || state.status === "finished") {
       state = await this.coordinator.createSession(roomId);
     }
 

@@ -68,32 +68,28 @@ export class GameCoordinator {
   ): Promise<{ player: Player; state: GameState }> {
     const state = await this.requireState(roomId);
 
-    if (state.status !== "waiting") {
-      throw new Error("La partida ya comenzó. No se pueden unir más jugadores.");
-    }
-    if (state.players.length >= MAX_PLAYERS) {
-      throw new Error(`Máximo ${MAX_PLAYERS} jugadores permitidos.`);
-    }
-
-    // Upsert en Prisma (el mismo username puede rejoin)
-    const dbPlayer = await this.prisma.playerModel.upsert({
-      where: { username: playerName },
-      update: {},
-      create: { username: playerName },
-    });
-
-    // Vincular jugador a la sesión
-    await this.prisma.gameSessionModel.update({
-      where: { id: state.sessionId },
-      data: { playerIds: { push: dbPlayer.id } },
-    });
-
-    // EVITAR DUPLICADOS en el estado de Redis (rejoin/refresh)
+    // 1. EVITAR DUPLICADOS / PERMITIR RECONEXIÓN (por nombre de usuario)
     const existingPlayer = state.players.find((p) => p.name === playerName);
     if (existingPlayer) {
       console.log(`[GameCoordinator] Re-conectando jugador existente: ${playerName}`);
       return { player: existingPlayer, state };
     }
+
+    // 2. Si es un jugador nuevo, solo puede entrar si la partida NO ha comenzado
+    if (state.status !== "waiting") {
+      throw new Error("La partida ya comenzó. No se pueden unir más jugadores nuevos.");
+    }
+
+    if (state.players.length >= MAX_PLAYERS) {
+      throw new Error(`Máximo ${MAX_PLAYERS} jugadores permitidos.`);
+    }
+
+    // Upsert en Prisma
+    const dbPlayer = await this.prisma.playerModel.upsert({
+      where: { username: playerName },
+      update: {},
+      create: { username: playerName },
+    });
 
     const player: Player = {
       id: dbPlayer.id,
