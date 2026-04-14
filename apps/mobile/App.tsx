@@ -22,24 +22,106 @@ import {
 } from '@dado-triple/shared-types';
 import {
   createRealtimeClient,
+  type RealtimeEndpoint,
   type RealtimeClient,
 } from './src/lib/realtime-client';
 
-const REALTIME_TRANSPORT: RealtimeTransport =
-  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'websocket' ? 'websocket' : 'socket.io';
-const SERVER_URL =
-  process.env.EXPO_PUBLIC_REALTIME_URL ??
-  (REALTIME_TRANSPORT === 'websocket' ? 'ws://10.0.2.2:5000' : 'http://10.0.2.2:4000');
+const EXPLICIT_REALTIME_TRANSPORT: RealtimeTransport =
+  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'socket.io' ? 'socket.io' : 'websocket';
+const EXPLICIT_REALTIME_URL = process.env.EXPO_PUBLIC_REALTIME_URL;
+const DEFAULT_AWS_ENDPOINTS: RealtimeEndpoint[] = [
+  { transport: 'websocket', url: 'ws://3.18.110.24:5000' },
+  { transport: 'socket.io', url: 'http://3.18.110.24:4000' },
+];
+const REALTIME_ENDPOINTS = buildRealtimeEndpoints(
+  EXPLICIT_REALTIME_TRANSPORT,
+  EXPLICIT_REALTIME_URL,
+  DEFAULT_AWS_ENDPOINTS,
+);
+const PRIMARY_ENDPOINT = REALTIME_ENDPOINTS[0];
+const REALTIME_FALLBACKS = REALTIME_ENDPOINTS.slice(1);
 const ROOM_ID = 'debug-room';
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
 }
 
+function buildRealtimeEndpoints(
+  preferredTransport: RealtimeTransport,
+  explicitUrl: string | undefined,
+  defaults: RealtimeEndpoint[],
+): RealtimeEndpoint[] {
+  const endpoints: RealtimeEndpoint[] = [];
+
+  if (explicitUrl) {
+    endpoints.push({
+      transport: preferredTransport,
+      url: normalizeRealtimeUrl(preferredTransport, explicitUrl),
+    });
+  }
+
+  const prioritizedDefaults = [...defaults].sort((left, right) => {
+    if (left.transport === right.transport) {
+      return 0;
+    }
+
+    if (left.transport === preferredTransport) {
+      return -1;
+    }
+
+    if (right.transport === preferredTransport) {
+      return 1;
+    }
+
+    return 0;
+  });
+
+  for (const endpoint of prioritizedDefaults) {
+    endpoints.push({
+      ...endpoint,
+      url: normalizeRealtimeUrl(endpoint.transport, endpoint.url),
+    });
+  }
+
+  return endpoints.filter((endpoint, index, list) => {
+    return (
+      list.findIndex((candidate) => {
+        return candidate.transport === endpoint.transport && candidate.url === endpoint.url;
+      }) === index
+    );
+  });
+}
+
+function normalizeRealtimeUrl(transport: RealtimeTransport, url: string): string {
+  if (transport === 'websocket') {
+    if (url.startsWith('http://')) {
+      return `ws://${url.slice('http://'.length)}`;
+    }
+
+    if (url.startsWith('https://')) {
+      return `wss://${url.slice('https://'.length)}`;
+    }
+  }
+
+  if (transport === 'socket.io') {
+    if (url.startsWith('ws://')) {
+      return `http://${url.slice('ws://'.length)}`;
+    }
+
+    if (url.startsWith('wss://')) {
+      return `https://${url.slice('wss://'.length)}`;
+    }
+  }
+
+  return url;
+}
+
 export default function App() {
   const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionId, setConnectionId] = useState<string | null>(null);
+  const [activeTransport, setActiveTransport] = useState<RealtimeTransport | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -53,17 +135,24 @@ export default function App() {
 
   useEffect(() => {
     const client = createRealtimeClient({
-      url: SERVER_URL,
-      transport: REALTIME_TRANSPORT,
-      onOpen: ({ connectionId: nextConnectionId, transport }) => {
+      url: PRIMARY_ENDPOINT.url,
+      transport: PRIMARY_ENDPOINT.transport,
+      fallbacks: REALTIME_FALLBACKS,
+      onOpen: ({ connectionId: nextConnectionId, transport, url }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
-        addLog(`CONECTADO via ${transport}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`);
+        setActiveTransport(transport);
+        setActiveUrl(url);
+        addLog(
+          `CONECTADO via ${transport} -> ${url}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`,
+        );
       },
-      onClose: ({ reason, transport }) => {
+      onClose: ({ reason, transport, url }) => {
         setIsConnected(false);
         setConnectionId(null);
-        addLog(`DESCONECTADO via ${transport}: ${reason ?? 'sin detalle'}`);
+        setActiveTransport(null);
+        setActiveUrl(url);
+        addLog(`DESCONECTADO via ${transport} -> ${url}: ${reason ?? 'sin detalle'}`);
       },
       onError: (message) => {
         addLog(`ERROR DE CONEXION: ${message}`);
@@ -103,6 +192,13 @@ export default function App() {
         addLog(`ERROR: ${data.message}${data.code ? ` (${data.code})` : ''}`);
       }),
     ];
+
+    addLog(`Intentando conectar con ${PRIMARY_ENDPOINT.transport} -> ${PRIMARY_ENDPOINT.url}`);
+    if (REALTIME_FALLBACKS.length > 0) {
+      addLog(
+        `Fallbacks configurados: ${REALTIME_FALLBACKS.map((endpoint) => `${endpoint.transport} -> ${endpoint.url}`).join(' | ')}`,
+      );
+    }
 
     client.connect();
     setSocket(client);
@@ -148,7 +244,10 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Dado Triple - Debug UI</Text>
       <Text style={styles.status}>
-        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Modo: {REALTIME_TRANSPORT.toUpperCase()} | ID: {connectionId ?? '-'}
+        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Preferido: {PRIMARY_ENDPOINT.transport.toUpperCase()} | Activo: {(activeTransport ?? PRIMARY_ENDPOINT.transport).toUpperCase()} | ID: {connectionId ?? '-'}
+      </Text>
+      <Text style={styles.status}>
+        URL activa: {activeUrl ?? PRIMARY_ENDPOINT.url}
       </Text>
 
       <View style={styles.section}>
