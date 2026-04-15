@@ -31,9 +31,30 @@ export class SocketHandler {
     this.io.on("connection", (socket: Socket) => {
       console.log(`[Socket] Conectado: ${socket.id}`);
 
+      socket.on(SocketEvents.CREATE_ROOM, (payload) =>
+        this.onClientMessage(socket, {
+          event: SocketEvents.CREATE_ROOM,
+          payload,
+        } as ClientSocketMessage),
+      );
+
       socket.on(SocketEvents.JOIN_GAME, (payload) =>
         this.onClientMessage(socket, {
           event: SocketEvents.JOIN_GAME,
+          payload,
+        } as ClientSocketMessage),
+      );
+
+      socket.on(SocketEvents.JOIN_AS_OBSERVER, (payload) =>
+        this.onClientMessage(socket, {
+          event: SocketEvents.JOIN_AS_OBSERVER,
+          payload,
+        } as ClientSocketMessage),
+      );
+
+      socket.on(SocketEvents.LIST_ROOMS, (payload) =>
+        this.onClientMessage(socket, {
+          event: SocketEvents.LIST_ROOMS,
           payload,
         } as ClientSocketMessage),
       );
@@ -72,17 +93,25 @@ export class SocketHandler {
     return {
       roomId: socket.data.roomId as string | undefined,
       playerId: socket.data.playerId as string | undefined,
+      role: socket.data.role as ConnectionContext["role"],
     };
   }
 
   private async applyDispatchResult(socket: Socket, result: DispatchResult): Promise<void> {
-    if (result.nextContext?.roomId) {
-      socket.data.roomId = result.nextContext.roomId;
-      await socket.join(result.nextContext.roomId);
-    }
+    const previousRoomId = socket.data.roomId as string | undefined;
 
-    if (result.nextContext?.playerId) {
+    if (result.nextContext) {
+      if (previousRoomId && previousRoomId !== result.nextContext.roomId) {
+        await socket.leave(previousRoomId);
+      }
+
+      socket.data.roomId = result.nextContext.roomId;
       socket.data.playerId = result.nextContext.playerId;
+      socket.data.role = result.nextContext.role;
+
+      if (result.nextContext.roomId) {
+        await socket.join(result.nextContext.roomId);
+      }
     }
 
     for (const effect of result.effects) {

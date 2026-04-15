@@ -1,11 +1,17 @@
-import { io as Client, type Socket as ClientSocket } from "socket.io-client";
+import { createServer, type Server as HttpServer } from "http";
 import { Server as IOServer } from "socket.io";
-import { createServer, Server as HttpServer } from "http";
-import { SocketHandler } from "../src/services/socket-handler.js";
+import { io as Client, type Socket as ClientSocket } from "socket.io-client";
+import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from "@jest/globals";
+import {
+  SocketEvents,
+  type GameState,
+  type RoomCreatedPayload,
+  type RoomsListPayload,
+} from "@dado-triple/shared-types";
 import { GameCoordinator } from "../src/services/game-coordinator.js";
-import { SocketEvents, type DiceRolledPayload } from "@dado-triple/shared-types";
+import { RealtimeEventService } from "../src/services/realtime-event-service.js";
+import { SocketHandler } from "../src/services/socket-handler.js";
 
-// Mocking dependencies
 const mockPrisma = {
   gameSessionModel: {
     create: jest.fn(),
@@ -24,20 +30,8 @@ const mockRedis = {
   saveGameState: jest.fn(),
   getGameState: jest.fn(),
   deleteGameState: jest.fn(),
+  listRoomIds: jest.fn(),
 };
-
-// Mock the PrismaService module
-jest.mock("../prisma/PrismaService.js", () => ({
-  getPrismaClient: () => mockPrisma,
-  disconnectPrisma: jest.fn(),
-}));
-
-// Mock the RedisService module
-jest.mock("../src/services/redis.service.js", () => ({
-  RedisService: jest.fn().mockImplementation(() => {
-    return mockRedis;
-  }),
-}));
 
 describe("Socket Integration Flow", () => {
   let io: IOServer;
@@ -45,6 +39,7 @@ describe("Socket Integration Flow", () => {
   let handler: SocketHandler;
   let coordinator: GameCoordinator;
   let port: number;
+  let stateStore: Map<string, GameState>;
 
   beforeAll((done) => {
     server = createServer();
@@ -55,12 +50,37 @@ describe("Socket Integration Flow", () => {
 
     server.listen(() => {
       const address = server.address();
-      if (typeof address === 'object' && address !== null) {
-        port = address.port;
-      } else {
-        port = 4001; // Fallback
-      }
+      port = typeof address === "object" && address !== null ? address.port : 4001;
       done();
+    });
+  });
+
+  beforeEach(() => {
+    stateStore = new Map<string, GameState>();
+    jest.clearAllMocks();
+
+    mockPrisma.gameSessionModel.create.mockImplementation(async () => ({
+      id: `session-${stateStore.size + 1}`,
+    }));
+    mockPrisma.gameSessionModel.update.mockResolvedValue({});
+    mockPrisma.playerModel.update.mockResolvedValue({});
+    mockPrisma.movementModel.create.mockResolvedValue({});
+    mockPrisma.playerModel.upsert.mockImplementation(async ({ where, create }: any) => ({
+      id: where.username.toLowerCase(),
+      username: create.username,
+    }));
+
+    mockRedis.saveGameState.mockImplementation(async (roomId: string, state: GameState) => {
+      stateStore.set(roomId, JSON.parse(JSON.stringify(state)));
+    });
+    mockRedis.getGameState.mockImplementation(async (roomId: string) => {
+      return stateStore.get(roomId) ?? null;
+    });
+    mockRedis.deleteGameState.mockImplementation(async (roomId: string) => {
+      stateStore.delete(roomId);
+    });
+    mockRedis.listRoomIds.mockImplementation(async () => {
+      return [...stateStore.keys()];
     });
   });
 
@@ -69,77 +89,130 @@ describe("Socket Integration Flow", () => {
     server.close(done);
   });
 
-  const createClient = (): ClientSocket => {
-    return Client(`http://localhost:${port}`);
-  };
+  const createClient = (): ClientSocket => Client(`http://localhost:${port}`);
 
-  test("two clients join and roll dice", (done) => {
-    const client1 = createClient();
-    const client2 = createClient();
-    const roomId = "test-room";
-    let diceRolledCount = 0;
-
-    // Reset mocks for this test
-    mockPrisma.gameSessionModel.create.mockResolvedValue({ id: "session-123" });
-    mockPrisma.gameSessionModel.update.mockResolvedValue({});
-    mockRedis.getGameState.mockResolvedValue(null); 
-
-    // Mock players returning different IDs
-    mockPrisma.playerModel.upsert
-      .mockResolvedValueOnce({ id: "p1", username: "Alice" })
-      .mockResolvedValueOnce({ id: "p2", username: "Bob" });
-
-    // Implementation to capture the state save
-    let capturedState: any = null;
-    mockRedis.saveGameState.mockImplementation((id, state) => {
-      capturedState = state;
-      mockRedis.getGameState.mockResolvedValue(state);
-      return Promise.resolve();
+  const waitForEvent = <Payload>(
+    client: ClientSocket,
+    event: string,
+  ): Promise<Payload> =>
+    new Promise((resolve) => {
+      client.once(event, (payload: Payload) => resolve(payload));
     });
 
-    const cleanup = () => {
-      client1.disconnect();
-      client2.disconnect();
-    };
+  test("joining different rooms keeps each game state isolated", async () => {
+    const realtime = new RealtimeEventService(coordinator);
 
-    client1.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
-      console.log('Client 1 received DICE_ROLLED');
-      expect(data.score).toBeGreaterThanOrEqual(0);
-      diceRolledCount++;
-      if (diceRolledCount === 2) {
-        cleanup();
-        done();
-      }
-    });
+    await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId: "room-a", playerName: "Alice" },
+      },
+    );
+    await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId: "room-b", playerName: "Bob" },
+      },
+    );
 
-    client2.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
-      console.log('Client 2 received DICE_ROLLED');
-      expect(data.score).toBeGreaterThanOrEqual(0);
-      diceRolledCount++;
-      if (diceRolledCount === 2) {
-        cleanup();
-        done();
-      }
-    });
+    const roomA = stateStore.get("room-a");
+    const roomB = stateStore.get("room-b");
 
-    // Alice joins
-    client1.emit(SocketEvents.JOIN_GAME, { roomId, playerName: "Alice" });
-    
-    // Bob joins after Alice is added (simulated delay)
-    setTimeout(() => {
-      client2.emit(SocketEvents.JOIN_GAME, { roomId, playerName: "Bob" });
-    }, 50);
+    expect(roomA?.players.map((player) => player.name)).toEqual(["Alice"]);
+    expect(roomB?.players.map((player) => player.name)).toEqual(["Bob"]);
+  });
 
-    // After both are joined, Alice rolls dice
-    setTimeout(() => {
-      // Force status to playing in the mock state to allow rolling
-      if (capturedState) {
-        capturedState.status = "playing";
-      }
-      
-      client1.emit(SocketEvents.ROLL_DICE, { roomId, playerId: "p1" });
-      client2.emit(SocketEvents.ROLL_DICE, { roomId, playerId: "p2" });
-    }, 300);
+  test("dice effects are emitted only to the matching room", async () => {
+    const realtime = new RealtimeEventService(coordinator);
 
-  }, 15000);
+    const joinA = await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId: "room-a", playerName: "Alice" },
+      },
+    );
+    await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId: "room-b", playerName: "Bob" },
+      },
+    );
+
+    const roomAState = stateStore.get("room-a");
+    const roomBState = stateStore.get("room-b");
+    expect(roomAState).toBeTruthy();
+    expect(roomBState).toBeTruthy();
+
+    roomAState!.status = "playing";
+    roomBState!.status = "playing";
+    stateStore.set("room-a", roomAState!);
+    stateStore.set("room-b", roomBState!);
+
+    const result = await realtime.handleClientMessage(
+      joinA.nextContext ?? {},
+      {
+        event: SocketEvents.ROLL_DICE,
+        payload: { roomId: "room-a", playerId: "alice" },
+      },
+    );
+
+    const roomEffects = result.effects.filter(
+      (effect): effect is Extract<typeof result.effects[number], { scope: "room" }> =>
+        effect.scope === "room",
+    );
+
+    expect(roomEffects.length).toBeGreaterThan(0);
+    expect(roomEffects.every((effect) => effect.roomId === "room-a")).toBe(true);
+  });
+
+  test("observer can join a room but cannot execute player actions", async () => {
+    const player = createClient();
+    const observer = createClient();
+    const roomId = "room-observer";
+
+    try {
+      player.emit(SocketEvents.JOIN_GAME, { roomId, playerName: "Alice" });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const observerState = waitForEvent<{ state: GameState }>(observer, SocketEvents.GAME_UPDATE);
+      const observerError = waitForEvent<{ message: string }>(observer, SocketEvents.ERROR);
+
+      observer.emit(SocketEvents.JOIN_AS_OBSERVER, { roomId });
+      await observerState;
+
+      observer.emit(SocketEvents.ROLL_DICE, { roomId, playerId: "alice" });
+
+      const error = await observerError;
+      expect(error.message).toContain("Solo un jugador");
+    } finally {
+      player.disconnect();
+      observer.disconnect();
+    }
+  });
+
+  test("create_room and list_rooms expose available rooms", async () => {
+    const client = createClient();
+    const roomId = "room-visible";
+
+    try {
+      const roomCreated = waitForEvent<RoomCreatedPayload>(client, SocketEvents.ROOM_CREATED);
+      client.emit(SocketEvents.CREATE_ROOM, { roomId });
+      const created = await roomCreated;
+
+      expect(created.room.roomId).toBe(roomId);
+      expect(created.state.players).toHaveLength(0);
+
+      const roomsListPromise = waitForEvent<RoomsListPayload>(client, SocketEvents.ROOMS_LIST);
+      client.emit(SocketEvents.LIST_ROOMS, { includeFinished: true });
+      const roomsList = await roomsListPromise;
+
+      expect(roomsList.rooms.some((room) => room.roomId === roomId)).toBe(true);
+    } finally {
+      client.disconnect();
+    }
+  });
 });
