@@ -2,6 +2,7 @@
   "extends": "@dado-triple/typescript-config/nextjs.json",
   "compilerOptions": {
     "baseUrl": "src",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["*"]
     }

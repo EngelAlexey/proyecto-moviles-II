@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,60 +10,184 @@ import {
 } from 'react-native';
 import {
   SocketEvents,
-  type GameState,
   type DiceRolledPayload,
-  type PlayerJoinedPayload,
-  type PairsAssignedPayload,
-  type RoundResultPayload,
-  type GameUpdatePayload,
-  type GameOverPayload,
   type ErrorPayload,
+  type GameOverPayload,
+  type GameState,
+  type GameUpdatePayload,
+  type PairsAssignedPayload,
+  type PlayerJoinedPayload,
   type RealtimeTransport,
+  type RoomCreatedPayload,
+  type RoundResultPayload,
 } from '@dado-triple/shared-types';
 import {
   createRealtimeClient,
   type RealtimeClient,
+  type RealtimeEndpoint,
 } from './src/lib/realtime-client';
 
-const REALTIME_TRANSPORT: RealtimeTransport =
-  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'websocket' ? 'websocket' : 'socket.io';
-const SERVER_URL =
-  process.env.EXPO_PUBLIC_REALTIME_URL ??
-  (REALTIME_TRANSPORT === 'websocket' ? 'ws://10.0.2.2:5000' : 'http://10.0.2.2:4000');
-const ROOM_ID = 'debug-room';
+const EXPLICIT_REALTIME_TRANSPORT: RealtimeTransport =
+  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'socket.io' ? 'socket.io' : 'websocket';
+const EXPLICIT_REALTIME_URL = process.env.EXPO_PUBLIC_REALTIME_URL;
+const DEFAULT_AWS_ENDPOINTS: RealtimeEndpoint[] = [
+  { transport: 'websocket', url: 'ws://3.18.110.24:5000' },
+  { transport: 'socket.io', url: 'http://3.18.110.24:4000' },
+];
+const REALTIME_ENDPOINTS = buildRealtimeEndpoints(
+  EXPLICIT_REALTIME_TRANSPORT,
+  EXPLICIT_REALTIME_URL,
+  DEFAULT_AWS_ENDPOINTS,
+);
+const PRIMARY_ENDPOINT = REALTIME_ENDPOINTS[0];
+const REALTIME_FALLBACKS = REALTIME_ENDPOINTS.slice(1);
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
+}
+
+function buildRealtimeEndpoints(
+  preferredTransport: RealtimeTransport,
+  explicitUrl: string | undefined,
+  defaults: RealtimeEndpoint[],
+): RealtimeEndpoint[] {
+  const endpoints: RealtimeEndpoint[] = [];
+
+  if (explicitUrl) {
+    endpoints.push({
+      transport: preferredTransport,
+      url: normalizeRealtimeUrl(preferredTransport, explicitUrl),
+    });
+  }
+
+  const prioritizedDefaults = [...defaults].sort((left, right) => {
+    if (left.transport === right.transport) {
+      return 0;
+    }
+
+    if (left.transport === preferredTransport) {
+      return -1;
+    }
+
+    if (right.transport === preferredTransport) {
+      return 1;
+    }
+
+    return 0;
+  });
+
+  for (const endpoint of prioritizedDefaults) {
+    endpoints.push({
+      ...endpoint,
+      url: normalizeRealtimeUrl(endpoint.transport, endpoint.url),
+    });
+  }
+
+  return endpoints.filter((endpoint, index, list) => {
+    return (
+      list.findIndex((candidate) => {
+        return candidate.transport === endpoint.transport && candidate.url === endpoint.url;
+      }) === index
+    );
+  });
+}
+
+function normalizeRealtimeUrl(transport: RealtimeTransport, url: string): string {
+  if (transport === 'websocket') {
+    if (url.startsWith('http://')) {
+      return `ws://${url.slice('http://'.length)}`;
+    }
+
+    if (url.startsWith('https://')) {
+      return `wss://${url.slice('https://'.length)}`;
+    }
+  }
+
+  if (transport === 'socket.io') {
+    if (url.startsWith('ws://')) {
+      return `http://${url.slice('ws://'.length)}`;
+    }
+
+    if (url.startsWith('wss://')) {
+      return `https://${url.slice('wss://'.length)}`;
+    }
+  }
+
+  return url;
 }
 
 export default function App() {
   const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionId, setConnectionId] = useState<string | null>(null);
+  const [activeTransport, setActiveTransport] = useState<RealtimeTransport | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const logsRef = useRef<ScrollView>(null);
+  const usernameRef = useRef('');
+  const autoJoinCreatedRoomRef = useRef(false);
 
   const addLog = useCallback((entry: string) => {
     setLogs((prev) => [...prev, `[${timestamp()}] ${entry}`]);
   }, []);
 
   useEffect(() => {
+    usernameRef.current = username;
+  }, [username]);
+
+  const emitJoinGame = useCallback(
+    (client: RealtimeClient, nextRoomId: string, nextUsername: string) => {
+      const normalizedRoomId = nextRoomId.trim();
+      const normalizedUsername = nextUsername.trim();
+
+      if (!normalizedRoomId) {
+        addLog('ERROR DE SALA: ingresa o crea una sala valida.');
+        return;
+      }
+
+      if (!normalizedUsername) {
+        addLog('ERROR DE JUGADOR: ingresa tu nombre antes de unirte.');
+        return;
+      }
+
+      setRoomId(normalizedRoomId);
+      setPlayerId(null);
+      setGameState(null);
+      client.send(SocketEvents.JOIN_GAME, {
+        playerName: normalizedUsername,
+        roomId: normalizedRoomId,
+      });
+      addLog(`-> JOIN_GAME emitido (sala: ${normalizedRoomId}, jugador: ${normalizedUsername})`);
+    },
+    [addLog],
+  );
+
+  useEffect(() => {
     const client = createRealtimeClient({
-      url: SERVER_URL,
-      transport: REALTIME_TRANSPORT,
-      onOpen: ({ connectionId: nextConnectionId, transport }) => {
+      url: PRIMARY_ENDPOINT.url,
+      transport: PRIMARY_ENDPOINT.transport,
+      fallbacks: REALTIME_FALLBACKS,
+      onOpen: ({ connectionId: nextConnectionId, transport, url }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
-        addLog(`CONECTADO via ${transport}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`);
+        setActiveTransport(transport);
+        setActiveUrl(url);
+        addLog(
+          `CONECTADO via ${transport} -> ${url}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`,
+        );
       },
-      onClose: ({ reason, transport }) => {
+      onClose: ({ reason, transport, url }) => {
         setIsConnected(false);
         setConnectionId(null);
-        addLog(`DESCONECTADO via ${transport}: ${reason ?? 'sin detalle'}`);
+        setActiveTransport(null);
+        setActiveUrl(url);
+        setPlayerId(null);
+        addLog(`DESCONECTADO via ${transport} -> ${url}: ${reason ?? 'sin detalle'}`);
       },
       onError: (message) => {
         addLog(`ERROR DE CONEXION: ${message}`);
@@ -71,6 +195,20 @@ export default function App() {
     });
 
     const unsubscribers = [
+      client.on(SocketEvents.ROOM_CREATED, (data: RoomCreatedPayload) => {
+        setRoomId(data.room.roomId);
+        setGameState(data.state);
+        setPlayerId(null);
+        addLog(`ROOM_CREATED: ${data.room.roomId}`);
+
+        if (autoJoinCreatedRoomRef.current && usernameRef.current.trim()) {
+          autoJoinCreatedRoomRef.current = false;
+          emitJoinGame(client, data.room.roomId, usernameRef.current);
+          return;
+        }
+
+        autoJoinCreatedRoomRef.current = false;
+      }),
       client.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
         addLog(`PLAYER_JOINED: ${data.player.name} (total: ${data.totalPlayers})`);
       }),
@@ -82,19 +220,27 @@ export default function App() {
       }),
       client.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
         const pairStr = data.pairs
-          .map((p) => `${p.player1Id} vs ${p.player2Id}`)
+          .map((pair) => `${pair.player1Id} vs ${pair.player2Id}`)
           .join(', ');
-        addLog(`PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`);
+        addLog(
+          `PAIRS_ASSIGNED ronda ${data.round}: ${pairStr}${data.bye ? ` | bye: ${data.bye}` : ''}`,
+        );
       }),
       client.on(SocketEvents.DICE_ROLLED, (data: DiceRolledPayload) => {
-        addLog(`DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`);
+        addLog(
+          `DICE_ROLLED: [${data.dice.join(',')}] combo=${data.combo} score=${data.score} (player: ${data.playerId})`,
+        );
       }),
       client.on(SocketEvents.ROUND_RESULT, (data: RoundResultPayload) => {
-        addLog(`ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} -> ganador: ${data.winnerId ?? 'empate'}`);
+        addLog(
+          `ROUND_RESULT: ${data.scores.player1} vs ${data.scores.player2} -> ganador: ${data.winnerId ?? 'empate'}`,
+        );
       }),
       client.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
         setGameState(data.state);
-        addLog(`GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`);
+        addLog(
+          `GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`,
+        );
       }),
       client.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
         addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
@@ -104,6 +250,13 @@ export default function App() {
       }),
     ];
 
+    addLog(`Intentando conectar con ${PRIMARY_ENDPOINT.transport} -> ${PRIMARY_ENDPOINT.url}`);
+    if (REALTIME_FALLBACKS.length > 0) {
+      addLog(
+        `Fallbacks configurados: ${REALTIME_FALLBACKS.map((endpoint) => `${endpoint.transport} -> ${endpoint.url}`).join(' | ')}`,
+      );
+    }
+
     client.connect();
     setSocket(client);
 
@@ -111,75 +264,133 @@ export default function App() {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
       client.disconnect(1000, 'Component unmounted');
     };
-  }, [addLog]);
+  }, [addLog, emitJoinGame]);
 
   useEffect(() => {
     logsRef.current?.scrollToEnd({ animated: true });
   }, [logs]);
 
-  const joinGame = () => {
-    if (!socket || !username.trim()) return;
-    socket.send(SocketEvents.JOIN_GAME, { playerName: username.trim(), roomId: ROOM_ID });
-    addLog(`-> JOIN_GAME emitido (username: ${username.trim()})`);
-  };
-
-  const markReady = () => {
-    if (!socket || !playerId) return;
-    socket.send(SocketEvents.PLAYER_READY, { roomId: ROOM_ID, playerId });
-    addLog('-> PLAYER_READY emitido');
-  };
-
-  const rollDice = () => {
-    if (!socket || !playerId) return;
-    socket.send(SocketEvents.ROLL_DICE, { roomId: ROOM_ID, playerId });
-    addLog('-> ROLL_DICE emitido');
-  };
-
   useEffect(() => {
-    if (!gameState || !username.trim()) return;
-    const me = gameState.players.find((p) => p.name === username.trim());
+    if (!gameState || !username.trim()) {
+      return;
+    }
+
+    const me = gameState.players.find((player) => player.name === username.trim());
     if (me && me.id !== playerId) {
       setPlayerId(me.id);
       addLog(`Player ID asignado: ${me.id}`);
     }
   }, [gameState, username, playerId, addLog]);
 
+  const createRoom = () => {
+    if (!socket || !isConnected) {
+      addLog('ERROR DE CONEXION: conecta el socket antes de crear una sala.');
+      return;
+    }
+
+    const requestedRoomId = roomId.trim() || undefined;
+    autoJoinCreatedRoomRef.current = Boolean(username.trim());
+    setPlayerId(null);
+    setGameState(null);
+    socket.send(SocketEvents.CREATE_ROOM, {
+      roomId: requestedRoomId,
+    });
+    addLog(
+      `-> CREATE_ROOM emitido${requestedRoomId ? ` (roomId solicitado: ${requestedRoomId})` : ''}`,
+    );
+  };
+
+  const joinGame = () => {
+    if (!socket) {
+      return;
+    }
+
+    emitJoinGame(socket, roomId, username);
+  };
+
+  const markReady = () => {
+    const normalizedRoomId = roomId.trim();
+    if (!socket || !playerId || !normalizedRoomId) {
+      return;
+    }
+
+    socket.send(SocketEvents.PLAYER_READY, { roomId: normalizedRoomId, playerId });
+    addLog('-> PLAYER_READY emitido');
+  };
+
+  const rollDice = () => {
+    const normalizedRoomId = roomId.trim();
+    if (!socket || !playerId || !normalizedRoomId) {
+      return;
+    }
+
+    socket.send(SocketEvents.ROLL_DICE, { roomId: normalizedRoomId, playerId });
+    addLog('-> ROLL_DICE emitido');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Dado Triple - Debug UI</Text>
+      <Text style={styles.title}>Dado Triple - Mobile Player Console</Text>
       <Text style={styles.status}>
-        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Modo: {REALTIME_TRANSPORT.toUpperCase()} | ID: {connectionId ?? '-'}
+        Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Rol: PLAYER | Sala:{' '}
+        {roomId || '-'} | Preferido: {PRIMARY_ENDPOINT.transport.toUpperCase()} | Activo:{' '}
+        {(activeTransport ?? PRIMARY_ENDPOINT.transport).toUpperCase()} | ID:{' '}
+        {connectionId ?? '-'}
       </Text>
+      <Text style={styles.status}>URL activa: {activeUrl ?? PRIMARY_ENDPOINT.url}</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>1. Unirse</Text>
+        <Text style={styles.sectionTitle}>1. Crear o unirse como jugador</Text>
         <TextInput
           style={styles.input}
-          placeholder="Nombre de usuario"
+          placeholder="Nombre del jugador"
           placeholderTextColor="#888"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
         />
-        <Button title="Unirse al Juego" onPress={joinGame} disabled={!isConnected || !username.trim()} />
+        <TextInput
+          style={styles.input}
+          placeholder="Codigo de sala (opcional para crear)"
+          placeholderTextColor="#888"
+          value={roomId}
+          onChangeText={setRoomId}
+          autoCapitalize="none"
+        />
+        <View style={styles.row}>
+          <View style={styles.btnWrap}>
+            <Button title="Crear sala" onPress={createRoom} disabled={!isConnected} />
+          </View>
+          <View style={styles.btnWrap}>
+            <Button
+              title="Unirse"
+              onPress={joinGame}
+              disabled={!isConnected || !username.trim() || !roomId.trim()}
+            />
+          </View>
+        </View>
+        <Text style={styles.helperText}>
+          Mobile es la unica app que juega. Puedes crear una sala nueva y entrar como
+          jugador, o unirte a una existente usando su codigo.
+        </Text>
       </View>
 
       {isConnected && playerId && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Controles</Text>
+          <Text style={styles.sectionTitle}>2. Controles del jugador</Text>
           <View style={styles.row}>
             <View style={styles.btnWrap}>
-              <Button title="Estoy Listo" onPress={markReady} />
+              <Button title="Estoy listo" onPress={markReady} />
             </View>
             <View style={styles.btnWrap}>
-              <Button title="Lanzar Dados" onPress={rollDice} />
+              <Button title="Lanzar dados" onPress={rollDice} />
             </View>
           </View>
         </View>
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>3. GameState (raw)</Text>
+        <Text style={styles.sectionTitle}>3. Estado de la partida</Text>
         <ScrollView style={styles.rawBox} nestedScrollEnabled>
           <Text style={styles.mono}>
             {gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aun)'}
@@ -193,8 +404,10 @@ export default function App() {
           {logs.length === 0 ? (
             <Text style={styles.mono}>(esperando eventos...)</Text>
           ) : (
-            logs.map((log, i) => (
-              <Text key={i} style={styles.mono}>{log}</Text>
+            logs.map((log, index) => (
+              <Text key={index} style={styles.mono}>
+                {log}
+              </Text>
             ))
           )}
         </ScrollView>
@@ -234,6 +447,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 6,
   },
+  helperText: {
+    color: '#8da2cf',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
+  },
   input: {
     backgroundColor: '#0f3460',
     color: '#fff',
@@ -253,7 +472,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a1a',
     borderRadius: 6,
     padding: 8,
-    maxHeight: 120,
+    maxHeight: 140,
   },
   logsSection: {
     flex: 1,

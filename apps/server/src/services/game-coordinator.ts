@@ -276,8 +276,13 @@ export class GameCoordinator {
     state.players = state.players.filter((p) => p.id !== playerId);
 
     if (state.players.length === 0) {
-      await this.redis.deleteGameState(roomId);
-      return null;
+      state.pairs = [];
+      state.currentDice = [0, 0, 0];
+      state.round = 0;
+
+      if (state.status !== "finished") {
+        state.status = "waiting";
+      }
     }
 
     await this.redis.saveGameState(roomId, state);
@@ -288,6 +293,20 @@ export class GameCoordinator {
 
   async getState(roomId: string): Promise<GameState | null> {
     return this.redis.getGameState(roomId);
+  }
+
+  async listRooms(): Promise<Array<{ roomId: string; state: GameState }>> {
+    const roomIds = await this.redis.listRoomIds();
+    const rooms = await Promise.all(
+      roomIds.map(async (roomId) => ({
+        roomId,
+        state: await this.redis.getGameState(roomId),
+      })),
+    );
+
+    return rooms.filter(
+      (room): room is { roomId: string; state: GameState } => room.state !== null,
+    );
   }
 
   // ── Helpers privados ─────────────────────────────────────────────────────

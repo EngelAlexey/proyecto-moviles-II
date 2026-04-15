@@ -4,6 +4,7 @@ import type { GameState } from "@dado-triple/shared-types";
 
 const KEY_PREFIX = "game:";
 const DEFAULT_TTL = 3600; // 1 hora
+const ROOMS_KEY = `${KEY_PREFIX}rooms`;
 
 /**
  * Interface para estandarizar las operaciones de persistencia de estado.
@@ -12,6 +13,7 @@ interface GameStateRepository {
   saveGameState(roomId: string, state: GameState): Promise<void>;
   getGameState(roomId: string): Promise<GameState | null>;
   deleteGameState(roomId: string): Promise<void>;
+  listRoomIds(): Promise<string[]>;
   disconnect(): Promise<void>;
 }
 
@@ -38,6 +40,18 @@ class InMemoryStrategy implements GameStateRepository {
 
   async deleteGameState(roomId: string): Promise<void> {
     this.store.delete(roomId);
+  }
+
+  async listRoomIds(): Promise<string[]> {
+    const now = Date.now();
+
+    for (const [roomId, item] of this.store.entries()) {
+      if (now > item.expiry) {
+        this.store.delete(roomId);
+      }
+    }
+
+    return [...this.store.keys()];
   }
 
   async disconnect(): Promise<void> {
@@ -69,7 +83,10 @@ class RedisStrategy implements GameStateRepository {
 
   async saveGameState(roomId: string, state: GameState): Promise<void> {
     const key = `${KEY_PREFIX}${roomId}`;
-    await this.client.set(key, JSON.stringify(state), "EX", DEFAULT_TTL);
+    await this.client.multi()
+      .set(key, JSON.stringify(state), "EX", DEFAULT_TTL)
+      .sadd(ROOMS_KEY, roomId)
+      .exec();
   }
 
   async getGameState(roomId: string): Promise<GameState | null> {
@@ -81,7 +98,14 @@ class RedisStrategy implements GameStateRepository {
 
   async deleteGameState(roomId: string): Promise<void> {
     const key = `${KEY_PREFIX}${roomId}`;
-    await this.client.del(key);
+    await this.client.multi()
+      .del(key)
+      .srem(ROOMS_KEY, roomId)
+      .exec();
+  }
+
+  async listRoomIds(): Promise<string[]> {
+    return this.client.smembers(ROOMS_KEY);
   }
 
   async disconnect(): Promise<void> {
@@ -109,6 +133,7 @@ class UpstashRestStrategy implements GameStateRepository {
   async saveGameState(roomId: string, state: GameState): Promise<void> {
     const key = `${KEY_PREFIX}${roomId}`;
     await this.client.set(key, JSON.stringify(state), { ex: DEFAULT_TTL });
+    await this.client.sadd(ROOMS_KEY, roomId);
   }
 
   async getGameState(roomId: string): Promise<GameState | null> {
@@ -121,6 +146,11 @@ class UpstashRestStrategy implements GameStateRepository {
   async deleteGameState(roomId: string): Promise<void> {
     const key = `${KEY_PREFIX}${roomId}`;
     await this.client.del(key);
+    await this.client.srem(ROOMS_KEY, roomId);
+  }
+
+  async listRoomIds(): Promise<string[]> {
+    return this.client.smembers<string[]>(ROOMS_KEY);
   }
 
   async disconnect(): Promise<void> {
@@ -205,6 +235,18 @@ export class RedisService {
 
   async disconnect(): Promise<void> {
     await this.repository.disconnect();
+  }
+
+  async listRoomIds(): Promise<string[]> {
+    try {
+      return await this.repository.listRoomIds();
+    } catch (err) {
+      if (!this.isUsingMemory) {
+        this.switchToMemory();
+      }
+
+      return [];
+    }
   }
 
   /** Informa si el sistema está operando en RAM o en Redis. */

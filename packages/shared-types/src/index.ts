@@ -47,6 +47,19 @@ export interface GameState {
   maxRounds: number;
 }
 
+export type ConnectionRole = "player" | "observer";
+
+export interface RoomSummary {
+  roomId: string;
+  sessionId: string;
+  status: GameStatus;
+  round: number;
+  maxRounds: number;
+  playerCount: number;
+  observerCount: number;
+  playerNames: string[];
+}
+
 // ─── Sesión persistida ───────────────────────────────────────────────────────
 
 export interface IGameSession {
@@ -60,11 +73,16 @@ export interface IGameSession {
 
 export enum SocketEvents {
   // Cliente → Servidor
+  CREATE_ROOM = "create_room",
   JOIN_GAME = "join_game",
+  JOIN_AS_OBSERVER = "join_as_observer",
+  LIST_ROOMS = "list_rooms",
   PLAYER_READY = "player_ready",
   ROLL_DICE = "roll_dice",
 
   // Servidor → Cliente
+  ROOM_CREATED = "room_created",
+  ROOMS_LIST = "rooms_list",
   PLAYER_JOINED = "player_joined",
   PLAYER_LEFT = "player_left",
   GAME_START = "game_start",
@@ -77,12 +95,17 @@ export enum SocketEvents {
 }
 
 export const CLIENT_SOCKET_EVENTS = [
+  SocketEvents.CREATE_ROOM,
   SocketEvents.JOIN_GAME,
+  SocketEvents.JOIN_AS_OBSERVER,
+  SocketEvents.LIST_ROOMS,
   SocketEvents.PLAYER_READY,
   SocketEvents.ROLL_DICE,
 ] as const;
 
 export const SERVER_SOCKET_EVENTS = [
+  SocketEvents.ROOM_CREATED,
+  SocketEvents.ROOMS_LIST,
   SocketEvents.PLAYER_JOINED,
   SocketEvents.PLAYER_LEFT,
   SocketEvents.GAME_START,
@@ -101,6 +124,28 @@ export type RealtimeTransport = "socket.io" | "websocket";
 /** Cliente envía al unirse. */
 export interface JoinGamePayload {
   playerName: string;
+}
+
+export interface CreateRoomPayload {
+  roomId?: string;
+  maxRounds?: number;
+}
+
+export interface JoinAsObserverPayload {
+  roomId: string;
+}
+
+export interface ListRoomsPayload {
+  includeFinished?: boolean;
+}
+
+export interface RoomCreatedPayload {
+  room: RoomSummary;
+  state: GameState;
+}
+
+export interface RoomsListPayload {
+  rooms: RoomSummary[];
 }
 
 /** Servidor notifica que un jugador se unió. */
@@ -149,12 +194,17 @@ export interface ErrorPayload {
 }
 
 export interface ClientSocketEventMap {
+  [SocketEvents.CREATE_ROOM]: CreateRoomPayload;
   [SocketEvents.JOIN_GAME]: JoinGamePayload & { roomId: string };
+  [SocketEvents.JOIN_AS_OBSERVER]: JoinAsObserverPayload;
+  [SocketEvents.LIST_ROOMS]: ListRoomsPayload;
   [SocketEvents.PLAYER_READY]: { roomId: string; playerId: string };
   [SocketEvents.ROLL_DICE]: { roomId: string; playerId: string };
 }
 
 export interface ServerSocketEventMap {
+  [SocketEvents.ROOM_CREATED]: RoomCreatedPayload;
+  [SocketEvents.ROOMS_LIST]: RoomsListPayload;
   [SocketEvents.PLAYER_JOINED]: PlayerJoinedPayload;
   [SocketEvents.PLAYER_LEFT]: { playerId: string };
   [SocketEvents.GAME_START]: Record<string, never>;
