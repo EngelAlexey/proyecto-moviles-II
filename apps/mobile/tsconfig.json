@@ -6,7 +6,7 @@
       "@/*": ["*"]
     },
     "types": ["node", "react", "jest"],
-    "typeRoots": ["./node_modules/@types"],
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": ["**/*.ts", "**/*.tsx", "App.tsx"]
 }
