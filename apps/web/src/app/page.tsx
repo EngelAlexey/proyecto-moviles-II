@@ -20,9 +20,59 @@ import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client
 
 const REALTIME_TRANSPORT: RealtimeTransport =
   process.env.NEXT_PUBLIC_REALTIME_TRANSPORT === 'socket.io' ? 'socket.io' : 'websocket';
+const DEFAULT_SERVER_URL =
+  REALTIME_TRANSPORT === 'websocket' ? 'ws://18.218.158.112:5000' : 'http://18.218.158.112:4000';
 const SERVER_URL =
-  process.env.NEXT_PUBLIC_REALTIME_URL ??
-  (REALTIME_TRANSPORT === 'websocket' ? 'ws://3.18.110.24:5000' : 'http://3.18.110.24:4000');
+  normalizeRealtimeUrl(
+    REALTIME_TRANSPORT,
+    process.env.NEXT_PUBLIC_REALTIME_URL ?? DEFAULT_SERVER_URL,
+  );
+
+function normalizeRealtimeUrl(transport: RealtimeTransport, rawUrl: string): string {
+  const url = rawUrl.trim();
+
+  if (transport === 'websocket') {
+    if (url.startsWith('http://')) {
+      return `ws://${url.slice('http://'.length)}`;
+    }
+
+    if (url.startsWith('https://')) {
+      return `wss://${url.slice('https://'.length)}`;
+    }
+
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      return url;
+    }
+
+    if (url.startsWith('ws:')) {
+      return `ws://${url.slice('ws:'.length).replace(/^\/+/, '')}`;
+    }
+
+    if (url.startsWith('wss:')) {
+      return `wss://${url.slice('wss:'.length).replace(/^\/+/, '')}`;
+    }
+
+    return `ws://${url.replace(/^\/+/, '')}`;
+  }
+
+  if (url.startsWith('ws://')) {
+    return `http://${url.slice('ws://'.length)}`;
+  }
+
+  if (url.startsWith('wss://')) {
+    return `https://${url.slice('wss://'.length)}`;
+  }
+
+  if (url.startsWith('socket.io://')) {
+    return `http://${url.slice('socket.io://'.length)}`;
+  }
+
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  return `http://${url.replace(/^\/+/, '')}`;
+}
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();

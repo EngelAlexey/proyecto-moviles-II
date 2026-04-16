@@ -9,6 +9,7 @@ Para una comprensión profunda del sistema, revisa nuestras guías detalladas:
 - [🏗️ Arquitectura del Sistema](./docs/ARQUITECTURA.md): Stack, Monorepo y Persistencia.
 - [🎲 Reglas del Juego](./docs/REGLAS.md): Motor de puntajes y emparejamiento.
 - [⚙️ Guía de Instalación](./docs/SETUP.md): Requisitos y ejecución paso a paso.
+- [🔌 Guía de Testeo Realtime](./GUIA_TESTEO_REALTIME.md): Endpoint actual, flujo de prueba y checklist QA.
 
 ---
 
