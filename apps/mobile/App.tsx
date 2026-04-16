@@ -31,8 +31,8 @@ const EXPLICIT_REALTIME_TRANSPORT: RealtimeTransport =
   process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'socket.io' ? 'socket.io' : 'websocket';
 const EXPLICIT_REALTIME_URL = process.env.EXPO_PUBLIC_REALTIME_URL;
 const DEFAULT_AWS_ENDPOINTS: RealtimeEndpoint[] = [
-  { transport: 'websocket', url: 'ws://3.18.110.24:5000' },
-  { transport: 'socket.io', url: 'http://3.18.110.24:4000' },
+  { transport: 'websocket', url: 'ws://18.218.158.112:5000' },
+  { transport: 'socket.io', url: 'http://18.218.158.112:4000' },
 ];
 const REALTIME_ENDPOINTS = buildRealtimeEndpoints(
   EXPLICIT_REALTIME_TRANSPORT,

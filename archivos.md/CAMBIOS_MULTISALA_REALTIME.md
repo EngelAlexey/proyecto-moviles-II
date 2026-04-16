@@ -465,8 +465,8 @@ Qué se hizo:
 
 Configuración actual por defecto:
 
-- websocket: `ws://3.18.110.24:5000`
-- fallback socket.io: `http://3.18.110.24:4000`
+- websocket: `ws://18.218.158.112:5000`
+- fallback socket.io: `http://18.218.158.112:4000`
 
 ### Ajustes de tipado en mobile
 
