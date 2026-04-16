@@ -1,37 +1,47 @@
-# 🏗️ Arquitectura del Sistema - Dado Triple
+# Arquitectura Del Sistema
 
-Este documento detalla la estructura técnica, flujo de datos y decisiones de diseño del proyecto Dado Triple Monorepo.
+## Vision general
 
-## Gestión del Monorepo
-El proyecto utiliza una arquitectura de **Monorepo** moderna para mantener la consistencia entre el cliente y el servidor.
-- **Orquestador:** [Turborepo](https://turbo.build/) para ejecución paralela de tareas (build, lint, dev).
-- **Gestor de Paquetes:** [pnpm](https://pnpm.io/) con workspaces para una gestión eficiente de dependencias y linkeo interno.
+El proyecto usa un monorepo con clientes web y mobile, un backend Node para servicios del repositorio y un servidor WebSocket nativo en Rust desplegado en AWS para el tiempo real distribuido.
 
-## Capas del Sistema
+## Capas principales
 
-### 1. Backend (`apps/server`)
-Servidor central robusto encargado de la lógica de negocio y estado en tiempo real.
-- **Framework:** Node.js + Express.
-- **Tiempo Real:** Contrato compartido para WebSocket nativo, con un adaptador temporal de Socket.IO mientras se integra el servidor en Rust.
-- **Motor de Juego:** `GameCoordinator` que orquestra el ciclo de vida de cada sesión.
+### Web
 
-### 2. Persistencia Híbrida
-El sistema utiliza una estrategia de almacenamiento de dos niveles para maximizar rendimiento:
-- **Estado Rápido (Redis):** Almacena el estado temporal de las salas (jugadores listos, puntuación de la ronda). Incluye un **fallback automático en memoria RAM** (Zero-Config) si Redis no está disponible.
-- **Historial Persistente (MongoDB Atlas):** Mediante [Prisma ORM](https://www.prisma.io/), se guardan permanentemente los perfiles de jugadores, sesiones terminadas y el historial de cada lanzamiento individual.
+- Next.js
+- funciona como `observer`
+- consume el endpoint fijo `ws://18.218.158.112:5000`
 
-### 3. Frontends
-- **Web:** Desarrollado con **Next.js 15+** y TailwindCSS para una experiencia de escritorio premium.
-- **Móvil:** Aplicación nativa con **React Native (Expo)** y NativeWind, optimizada para Android e iOS.
+### Mobile
 
-### 4. Paquetes Compartidos (`packages/`)
-- **`shared-types`:** Definiciones de TypeScript e interfaces comunes para evitar errores de comunicación.
-- **`game-logic`:** El motor puro de cálculo de dados y emparejamiento, desacoplado del servidor.
-- **`typescript-config`:** Configuraciones base de TS compartidas.
+- React Native con Expo
+- funciona como `player`
+- consume el mismo endpoint fijo `ws://18.218.158.112:5000`
 
-## Flujo de Comunicación
-1. El cliente envia un mensaje de tiempo real con el formato `{ event, payload }`.
-2. El transporte activo (`socket.io` legado o `websocket`) delega el evento al `RealtimeEventService`.
-3. El estado se recupera y actualiza en **Redis**.
-4. Se dispara un guardado asíncrono ("fire-and-forget") a **MongoDB** para telemetría y persistencia.
-5. El servidor emite `GAME_UPDATE` a todos los jugadores de la sala con el nuevo estado.
+### Backend Node
+
+- Express
+- Prisma
+- Redis con fallback en memoria
+- mantiene logica de coordinacion y pruebas del repositorio
+
+### Realtime distribuido
+
+- servidor WebSocket nativo en Rust
+- mensajes en formato `{ event, payload }`
+- desplegado en AWS y administrado como servicio
+
+## Flujo de comunicacion
+
+1. El cliente abre un WebSocket contra `ws://18.218.158.112:5000`
+2. El cliente envia mensajes `{ event, payload }`
+3. El servidor procesa la accion segun sala y rol
+4. El estado del juego se actualiza
+5. El servidor emite eventos de vuelta a la sala correspondiente
+
+## Paquetes compartidos
+
+- `packages/shared-types`: contrato de eventos y tipos comunes
+- `packages/game-logic`: motor puro del juego
+- `packages/typescript-config`: configuracion base
+- `packages/tailwind-config`: configuracion compartida de estilos
