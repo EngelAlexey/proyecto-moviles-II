@@ -19,8 +19,7 @@
     "expo-status-bar": "~1.11.1",
     "nativewind": "^2.0.11",
     "react": "18.2.0",
-    "react-native": "0.73.4",
-    "socket.io-client": "latest"
+    "react-native": "0.73.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

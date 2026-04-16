@@ -17,110 +17,23 @@ import {
   type GameUpdatePayload,
   type PairsAssignedPayload,
   type PlayerJoinedPayload,
-  type RealtimeTransport,
   type RoomCreatedPayload,
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
-import {
-  createRealtimeClient,
-  type RealtimeClient,
-  type RealtimeEndpoint,
-} from './src/lib/realtime-client';
+import { createRealtimeClient, type RealtimeClient } from './src/lib/realtime-client';
 
-const EXPLICIT_REALTIME_TRANSPORT: RealtimeTransport =
-  process.env.EXPO_PUBLIC_REALTIME_TRANSPORT === 'socket.io' ? 'socket.io' : 'websocket';
-const EXPLICIT_REALTIME_URL = process.env.EXPO_PUBLIC_REALTIME_URL;
-const DEFAULT_AWS_ENDPOINTS: RealtimeEndpoint[] = [
-  { transport: 'websocket', url: 'ws://18.218.158.112:5000' },
-  { transport: 'socket.io', url: 'http://18.218.158.112:4000' },
-];
-const REALTIME_ENDPOINTS = buildRealtimeEndpoints(
-  EXPLICIT_REALTIME_TRANSPORT,
-  EXPLICIT_REALTIME_URL,
-  DEFAULT_AWS_ENDPOINTS,
-);
-const PRIMARY_ENDPOINT = REALTIME_ENDPOINTS[0];
-const REALTIME_FALLBACKS = REALTIME_ENDPOINTS.slice(1);
+const SERVER_URL = 'ws://18.218.158.112:5000';
+const REALTIME_TRANSPORT_LABEL = 'WEBSOCKET';
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
-}
-
-function buildRealtimeEndpoints(
-  preferredTransport: RealtimeTransport,
-  explicitUrl: string | undefined,
-  defaults: RealtimeEndpoint[],
-): RealtimeEndpoint[] {
-  const endpoints: RealtimeEndpoint[] = [];
-
-  if (explicitUrl) {
-    endpoints.push({
-      transport: preferredTransport,
-      url: normalizeRealtimeUrl(preferredTransport, explicitUrl),
-    });
-  }
-
-  const prioritizedDefaults = [...defaults].sort((left, right) => {
-    if (left.transport === right.transport) {
-      return 0;
-    }
-
-    if (left.transport === preferredTransport) {
-      return -1;
-    }
-
-    if (right.transport === preferredTransport) {
-      return 1;
-    }
-
-    return 0;
-  });
-
-  for (const endpoint of prioritizedDefaults) {
-    endpoints.push({
-      ...endpoint,
-      url: normalizeRealtimeUrl(endpoint.transport, endpoint.url),
-    });
-  }
-
-  return endpoints.filter((endpoint, index, list) => {
-    return (
-      list.findIndex((candidate) => {
-        return candidate.transport === endpoint.transport && candidate.url === endpoint.url;
-      }) === index
-    );
-  });
-}
-
-function normalizeRealtimeUrl(transport: RealtimeTransport, url: string): string {
-  if (transport === 'websocket') {
-    if (url.startsWith('http://')) {
-      return `ws://${url.slice('http://'.length)}`;
-    }
-
-    if (url.startsWith('https://')) {
-      return `wss://${url.slice('https://'.length)}`;
-    }
-  }
-
-  if (transport === 'socket.io') {
-    if (url.startsWith('ws://')) {
-      return `http://${url.slice('ws://'.length)}`;
-    }
-
-    if (url.startsWith('wss://')) {
-      return `https://${url.slice('wss://'.length)}`;
-    }
-  }
-
-  return url;
 }
 
 export default function App() {
   const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionId, setConnectionId] = useState<string | null>(null);
-  const [activeTransport, setActiveTransport] = useState<RealtimeTransport | null>(null);
+  const [activeTransport, setActiveTransport] = useState<'websocket' | null>(null);
   const [activeUrl, setActiveUrl] = useState<string | null>(null);
   const [roomId, setRoomId] = useState('');
   const [username, setUsername] = useState('');
@@ -169,9 +82,7 @@ export default function App() {
 
   useEffect(() => {
     const client = createRealtimeClient({
-      url: PRIMARY_ENDPOINT.url,
-      transport: PRIMARY_ENDPOINT.transport,
-      fallbacks: REALTIME_FALLBACKS,
+      url: SERVER_URL,
       onOpen: ({ connectionId: nextConnectionId, transport, url }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
@@ -250,13 +161,7 @@ export default function App() {
       }),
     ];
 
-    addLog(`Intentando conectar con ${PRIMARY_ENDPOINT.transport} -> ${PRIMARY_ENDPOINT.url}`);
-    if (REALTIME_FALLBACKS.length > 0) {
-      addLog(
-        `Fallbacks configurados: ${REALTIME_FALLBACKS.map((endpoint) => `${endpoint.transport} -> ${endpoint.url}`).join(' | ')}`,
-      );
-    }
-
+    addLog(`Intentando conectar con websocket -> ${SERVER_URL}`);
     client.connect();
     setSocket(client);
 
@@ -333,11 +238,11 @@ export default function App() {
       <Text style={styles.title}>Dado Triple - Mobile Player Console</Text>
       <Text style={styles.status}>
         Socket: {isConnected ? 'CONECTADO' : 'DESCONECTADO'} | Rol: PLAYER | Sala:{' '}
-        {roomId || '-'} | Preferido: {PRIMARY_ENDPOINT.transport.toUpperCase()} | Activo:{' '}
-        {(activeTransport ?? PRIMARY_ENDPOINT.transport).toUpperCase()} | ID:{' '}
+        {roomId || '-'} | Modo: {REALTIME_TRANSPORT_LABEL} | Activo:{' '}
+        {(activeTransport ?? 'websocket').toUpperCase()} | ID:{' '}
         {connectionId ?? '-'}
       </Text>
-      <Text style={styles.status}>URL activa: {activeUrl ?? PRIMARY_ENDPOINT.url}</Text>
+      <Text style={styles.status}>URL activa: {activeUrl ?? SERVER_URL}</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>1. Crear o unirse como jugador</Text>

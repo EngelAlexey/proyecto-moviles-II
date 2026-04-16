@@ -1,66 +1,70 @@
-# ⚙️ Guía de Desarrollo e Instalación - Dado Triple
+# Setup Local
 
-Este documento explica cómo configurar tu entorno local para desarrollar y probar el monorepo Dado Triple.
+Esta guia explica como preparar el monorepo para desarrollo local sin perder de vista que los clientes usan el WebSocket distribuido en AWS.
 
-## Requisitos Previos
+## Requisitos
 
-- **Node.js:** Versión 18 o superior.
-- **pnpm:** Gestor de paquetes recomendado. Instálalo con `npm install -g pnpm`.
-- **MongoDB Atlas:** Una instancia activa en la nube para persistencia.
+- Node.js 18 o superior
+- pnpm
+- MongoDB Atlas
+- Redis opcional para desarrollo local del backend Node
 
-## Pasos de Instalación
+## Instalacion
 
-### 1. Clonar e Instalar
-Desde la raíz del proyecto, instala todas las dependencias de los paquetes internos y aplicaciones con un solo comando:
+Desde la raiz:
+
 ```bash
 pnpm install
 ```
 
-### 2. Configurar Variables de Entorno
-Crea o edita el archivo en `apps/server/.env` e incluye al menos la URL de tu base de datos MongoDB:
+## Variables del backend Node
+
+Archivo: `apps/server/.env`
+
 ```env
-# apps/server/.env
 DATABASE_URL="mongodb+srv://<usuario>:<password>@cluster..."
 PORT=4000
-# REDIS_URL="redis://..." (Opcional, en desarrollo usa RAM interna)
+# REDIS_URL="redis://..."  # opcional para desarrollo
 ```
 
-### 3. Generar Modelos de Base de Datos
-Prepara **Prisma ORM** para interactuar con MongoDB Atlas ejecutando la generación de tipos:
+## Prisma
+
 ```bash
 cd apps/server
 npx prisma generate
 cd ../..
 ```
 
-### 4. Ejecución del Monorepo
-Usa la potencia de **Turborepo** para levantar todos los servicios (Web, Móvil y Servidor) simultáneamente:
+## Levantar el monorepo
+
 ```bash
 pnpm dev
 ```
 
-### 5. Servicios Levantados
-- **Web:** [http://localhost:3000](http://localhost:3000)
-- **Servidor API/Socket:** [http://localhost:4000](http://localhost:4000)
-- **Móvil (Metro):** Escanea el código QR de Expo en tu terminal.
+Servicios locales esperados:
 
-### 6. Cambiar a WebSocket para Rust
+- Web: `http://localhost:3000`
+- API/Socket Node: `http://localhost:4000`
+- Mobile: Expo / Metro
 
-Cuando el servidor en Rust este disponible, activa el modo `websocket`:
+## Realtime distribuido
 
-```env
-# apps/web/.env.local
-NEXT_PUBLIC_REALTIME_TRANSPORT=websocket
-NEXT_PUBLIC_REALTIME_URL=ws://localhost:5000
+Web y Mobile usan WebSocket nativo fijo contra:
 
-# apps/mobile/.env
-EXPO_PUBLIC_REALTIME_TRANSPORT=websocket
-EXPO_PUBLIC_REALTIME_URL=ws://10.0.2.2:5000
+```txt
+ws://18.218.158.112:5000
 ```
 
-Si necesitas seguir usando el backend actual de Node, deja `socket.io` como transporte o simplemente omite esas variables.
+Eso significa:
 
-## Consejos de Desarrollo
-- **Zero-Config Redis:** Si no configuras `REDIS_URL` en el `.env`, el servidor activará automáticamente el modo de respaldo en memoria RAM para facilitar pruebas locales.
-- **Deduplicación:** El servidor cuenta con un sistema de auto-sanación que limpia a los jugadores duplicados en cada interacción.
-- **ESM Native:** El proyecto utiliza módulos de ECMAScript (`type: module`) nativos para una arquitectura moderna y eficiente.
+- no hace falta configurar variables de entorno para el transporte realtime
+- `localhost` y `10.0.2.2` ya no se usan en los clientes
+- para que el flujo realtime funcione, el servidor Rust en AWS debe estar levantado
+
+La guia operativa del servidor en AWS esta en [WEBSOCKET_DISTRIBUIDO.md](./WEBSOCKET_DISTRIBUIDO.md).
+
+## Notas
+
+- Si no configuras Redis, el backend Node puede usar fallback en memoria RAM para desarrollo.
+- La web funciona como observador.
+- Mobile funciona como jugador.
