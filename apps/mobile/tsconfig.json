@@ -1,9 +1,8 @@
 {
   "extends": "@dado-triple/typescript-config/react-native.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["./*"]
     },
     "types": ["node", "react", "jest"],
     "typeRoots": ["./node_modules/@types"]
