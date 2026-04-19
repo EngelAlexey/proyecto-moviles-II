@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@dado-triple/db": "workspace:*",
     "@dado-triple/game-logic": "workspace:*",
     "@dado-triple/shared-types": "workspace:*",
     "lucide-react": "latest",
@@ -22,6 +23,7 @@
     "@dado-triple/tailwind-config": "workspace:*",
     "@dado-triple/typescript-config": "workspace:*",
     "@playwright/test": "^1.59.0",
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

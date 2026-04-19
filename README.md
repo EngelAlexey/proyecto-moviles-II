@@ -57,10 +57,11 @@ PORT=4000
 Genera Prisma:
 
 ```bash
-cd apps/server
-npx prisma generate
-cd ../..
+pnpm --filter @dado-triple/db prisma:generate
 ```
+
+Si vas a usar el dashboard administrativo de `apps/web`, define también `DATABASE_URL` en
+`apps/web/.env`.
 
 ## Desarrollo
 
