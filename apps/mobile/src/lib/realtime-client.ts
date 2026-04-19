@@ -1,7 +1,6 @@
+import { io, type Socket } from 'socket.io-client';
 import {
   SERVER_SOCKET_EVENTS,
-  parseSocketMessage,
-  serializeSocketMessage,
   type ClientSocketMessage,
   type ClientSocketEvent,
   type ClientSocketEventMap,
@@ -10,7 +9,7 @@ import {
 } from '@dado-triple/shared-types';
 
 export interface LifecycleMeta {
-  transport: 'websocket';
+  transport: 'websocket' | 'polling';
   connectionId: string | null;
   reason?: string;
 }
@@ -62,81 +61,66 @@ function createRegistry() {
 
 export function createRealtimeClient(options: CreateRealtimeClientOptions): RealtimeClient {
   const registry = createRegistry();
-  return createWebSocketClient(options, registry);
-}
-
-function createWebSocketClient(
-  options: CreateRealtimeClientOptions,
-  registry: ReturnType<typeof createRegistry>,
-): RealtimeClient {
-  let socket: WebSocket | null = null;
+  
+  let socket: Socket | null = null;
 
   const connect = () => {
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    if (socket && socket.connected) {
       return;
     }
 
-    socket = new WebSocket(options.url);
+    socket = io(options.url, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+    });
 
-    socket.onopen = () => {
+    socket.on('connect', () => {
+      const id = socket?.id || null;
+      let transportName = 'websocket';
+      if (socket && socket.io && socket.io.engine && socket.io.engine.transport) {
+        transportName = socket.io.engine.transport.name;
+      }
+      
       options.onOpen?.({
-        transport: 'websocket',
-        connectionId: null,
+        transport: transportName as 'websocket' | 'polling',
+        connectionId: id,
       });
-    };
+    });
 
-    socket.onclose = (event) => {
+    socket.on('disconnect', (reason) => {
       options.onClose?.({
         transport: 'websocket',
         connectionId: null,
-        reason: event.reason || 'closed',
+        reason: reason,
       });
-    };
+    });
 
-    socket.onerror = (event) => {
-      options.onError?.('No fue posible conectar con el WebSocket nativo.', event);
-    };
+    socket.on('connect_error', (error) => {
+      options.onError?.('No fue posible conectar con el servidor en tiempo real.', error);
+    });
 
-    socket.onmessage = (event) => {
-      const raw = typeof event.data === 'string' ? event.data : String(event.data);
-      const parsed = parseSocketMessage(raw);
-
-      if (!parsed) {
-        options.onError?.('Se recibio un mensaje WebSocket invalido.', raw);
-        return;
-      }
-
-      if (!SERVER_SOCKET_EVENTS.includes(parsed.event as ServerSocketEvent)) {
-        return;
-      }
-
-      registry.emit(
-        parsed.event as ServerSocketEvent,
-        parsed.payload as ServerSocketEventMap[ServerSocketEvent],
-      );
-    };
+    SERVER_SOCKET_EVENTS.forEach((eventName) => {
+      socket?.on(eventName, (payload) => {
+        registry.emit(eventName, payload);
+      });
+    });
   };
 
   return {
     connect,
-    disconnect: (code, reason) => {
-      socket?.close(code, reason);
+    disconnect: () => {
+      socket?.disconnect();
       socket = null;
     },
-    getConnectionId: () => null,
+    getConnectionId: () => socket?.id || null,
     on: (event, listener) => registry.on(event, listener),
     send: (event, payload) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        options.onError?.('No hay una conexion WebSocket abierta para enviar mensajes.');
+      if (!socket || !socket.connected) {
+        options.onError?.('No hay una conexion abierta para enviar mensajes.');
         return;
       }
 
-      const message = {
-        event,
-        payload,
-      } as ClientSocketMessage;
-
-      socket.send(serializeSocketMessage(message));
+      socket.emit(event, payload);
     },
   };
 }

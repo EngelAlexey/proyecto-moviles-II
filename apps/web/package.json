@@ -17,7 +17,8 @@
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@dado-triple/tailwind-config": "workspace:*",

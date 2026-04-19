@@ -36,7 +36,7 @@ import {
 } from '@dado-triple/shared-types';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
 
-const DEFAULT_REALTIME_HOST = '18.218.158.112:5000';
+const DEFAULT_REALTIME_HOST = 'proyecto-moviles-ii.onrender.com';
 
 function resolveRealtimeUrl(): string {
   const explicitUrl = process.env.NEXT_PUBLIC_REALTIME_URL?.trim();
