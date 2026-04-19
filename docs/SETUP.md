@@ -27,12 +27,21 @@ PORT=4000
 # REDIS_URL="redis://..."  # opcional para desarrollo
 ```
 
+## Variables de la app web
+
+Archivo: `apps/web/.env`
+
+```env
+DATABASE_URL="mongodb+srv://<usuario>:<password>@cluster..."
+```
+
+La app web sigue observando el juego por WebSocket, pero ahora expone rutas
+administrativas bajo `/dashboard/*` que leen historial y ranking directo desde MongoDB.
+
 ## Prisma
 
 ```bash
-cd apps/server
-npx prisma generate
-cd ../..
+pnpm --filter @dado-triple/db prisma:generate
 ```
 
 ## Levantar el monorepo
