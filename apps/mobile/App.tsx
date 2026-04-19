@@ -21,12 +21,20 @@ import {
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
 import { createRealtimeClient, type RealtimeClient } from './src/lib/realtime-client';
+import { GameScreen } from './src/components/GameScreen';
 
 const SERVER_URL = 'ws://18.218.158.112:5000';
 const REALTIME_TRANSPORT_LABEL = 'WEBSOCKET';
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
+}
+
+function normalizeGameState(state: GameState): GameState {
+  return {
+    ...state,
+    byePlayerId: state.byePlayerId ?? null,
+  };
 }
 
 export default function App() {
@@ -39,6 +47,7 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [latestPairing, setLatestPairing] = useState<PairsAssignedPayload | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const logsRef = useRef<ScrollView>(null);
@@ -71,6 +80,7 @@ export default function App() {
       setRoomId(normalizedRoomId);
       setPlayerId(null);
       setGameState(null);
+      setLatestPairing(null);
       client.send(SocketEvents.JOIN_GAME, {
         playerName: normalizedUsername,
         roomId: normalizedRoomId,
@@ -98,6 +108,8 @@ export default function App() {
         setActiveTransport(null);
         setActiveUrl(url);
         setPlayerId(null);
+        setGameState(null);
+        setLatestPairing(null);
         addLog(`DESCONECTADO via ${transport} -> ${url}: ${reason ?? 'sin detalle'}`);
       },
       onError: (message) => {
@@ -108,8 +120,9 @@ export default function App() {
     const unsubscribers = [
       client.on(SocketEvents.ROOM_CREATED, (data: RoomCreatedPayload) => {
         setRoomId(data.room.roomId);
-        setGameState(data.state);
+        setGameState(normalizeGameState(data.state));
         setPlayerId(null);
+        setLatestPairing(null);
         addLog(`ROOM_CREATED: ${data.room.roomId}`);
 
         if (autoJoinCreatedRoomRef.current && usernameRef.current.trim()) {
@@ -130,6 +143,7 @@ export default function App() {
         addLog('GAME_START');
       }),
       client.on(SocketEvents.PAIRS_ASSIGNED, (data: PairsAssignedPayload) => {
+        setLatestPairing(data);
         const pairStr = data.pairs
           .map((pair) => `${pair.player1Id} vs ${pair.player2Id}`)
           .join(', ');
@@ -148,12 +162,13 @@ export default function App() {
         );
       }),
       client.on(SocketEvents.GAME_UPDATE, (data: GameUpdatePayload) => {
-        setGameState(data.state);
+        setGameState(normalizeGameState(data.state));
         addLog(
           `GAME_UPDATE: status=${data.state.status} ronda=${data.state.round} jugadores=${data.state.players.length}`,
         );
       }),
       client.on(SocketEvents.GAME_OVER, (data: GameOverPayload) => {
+        setLatestPairing(null);
         addLog(`GAME_OVER: ganador=${data.winnerId} scores=${JSON.stringify(data.finalScores)}`);
       }),
       client.on(SocketEvents.ERROR, (data: ErrorPayload) => {
@@ -197,6 +212,7 @@ export default function App() {
     autoJoinCreatedRoomRef.current = Boolean(username.trim());
     setPlayerId(null);
     setGameState(null);
+    setLatestPairing(null);
     socket.send(SocketEvents.CREATE_ROOM, {
       roomId: requestedRoomId,
     });
@@ -280,22 +296,29 @@ export default function App() {
         </Text>
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>2. Mesa de juego</Text>
+        <GameScreen
+          gameState={gameState}
+          localPlayerId={playerId}
+          latestPairing={latestPairing}
+          onRollDice={rollDice}
+        />
+      </View>
+
       {isConnected && playerId && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Controles del jugador</Text>
+          <Text style={styles.sectionTitle}>3. Controles del jugador</Text>
           <View style={styles.row}>
             <View style={styles.btnWrap}>
               <Button title="Estoy listo" onPress={markReady} />
-            </View>
-            <View style={styles.btnWrap}>
-              <Button title="Lanzar dados" onPress={rollDice} />
             </View>
           </View>
         </View>
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>3. Estado de la partida</Text>
+        <Text style={styles.sectionTitle}>4. Estado de la partida</Text>
         <ScrollView style={styles.rawBox} nestedScrollEnabled>
           <Text style={styles.mono}>
             {gameState ? JSON.stringify(gameState, null, 2) : '(sin estado aun)'}
@@ -304,7 +327,7 @@ export default function App() {
       </View>
 
       <View style={[styles.section, styles.logsSection]}>
-        <Text style={styles.sectionTitle}>4. Event Logs ({logs.length})</Text>
+        <Text style={styles.sectionTitle}>5. Event Logs ({logs.length})</Text>
         <ScrollView ref={logsRef} style={styles.rawBox} nestedScrollEnabled>
           {logs.length === 0 ? (
             <Text style={styles.mono}>(esperando eventos...)</Text>
