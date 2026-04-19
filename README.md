@@ -79,6 +79,12 @@ Ese comando levanta:
 
 Si ya tienes otro `next dev` abierto en `apps/web`, cierralo antes o `pnpm dev` fallara por servidor duplicado.
 
+Si solo quieres backend y web:
+
+```bash
+pnpm dev:no-mobile
+```
+
 Servicios locales:
 
 - Web: `http://localhost:3000`
@@ -101,3 +107,33 @@ pnpm --filter @dado-triple/web exec tsc --noEmit --pretty false
 pnpm --filter @dado-triple/server test -- socket-flow.test.ts
 pnpm --filter @dado-triple/web test -- visitor-view.spec.ts
 ```
+
+## Deploy
+
+### Web en Vercel
+
+```bash
+pnpm deploy:web
+```
+
+Requiere haber hecho `vercel login` al menos una vez y configurar el proyecto apuntando a `apps/web`.
+
+### Server en Render
+
+El repo incluye `render.yaml` para desplegar `apps/server` como servicio web Node.
+
+Variables requeridas en Render:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `PORT=4000`
+
+### Mobile instalable
+
+Para generar un APK instalable de Android:
+
+```bash
+pnpm mobile:build:android:preview
+```
+
+Ese build usa EAS y produce un APK que puedes instalar en el telefono. Una vez instalado, la app se abre desde el icono como cualquier otra app, sin volver a usar `expo start`.
