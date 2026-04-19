@@ -21,8 +21,9 @@ Este documento está diseñado para proporcionar contexto técnico rápido a asi
 -   **`packages/shared-types/src/index.ts`**: Fuente de verdad para interfaces de modelos Prisma, eventos de Socket.io y DTOs compartidos.
 
 ### Persistencia y Base de Datos (Server)
--   **`apps/server/prisma/schema.prisma`**: Definición de modelos MongoDB Atlas.
--   **`apps/server/prisma/PrismaService.ts`**: Implementación de **Singleton** para `PrismaClient`. Debes usar siempre la instancia exportada `prisma` de este archivo en los controladores del servidor.
+-   **`packages/db/prisma/schema.prisma`**: Fuente de verdad de los modelos Prisma/MongoDB Atlas.
+-   **`packages/db/src/index.ts`**: Implementación de **Singleton** para `PrismaClient`, compartida por `apps/server` y `apps/web`.
+-   **`apps/server/src/prisma/PrismaService.ts`**: Re-export de compatibilidad para no romper imports existentes en el backend.
 -   **Importante:** Este proyecto utiliza **Prisma v6 Stable**. No intentes usar archivos `prisma.config.ts` ni configuraciones de la v7.
 
 ---
@@ -37,7 +38,7 @@ Este documento está diseñado para proporcionar contexto técnico rápido a asi
 
 ## 🚦 Flujos de Trabajo Comunes (CLI Context)
 
--   **Regenerar Tipos Prisma:** `cd apps/server && npx prisma generate`
+-   **Regenerar Tipos Prisma:** `pnpm --filter @dado-triple/db prisma:generate`
 -   **Probar Conexión DB:** `cd apps/server && pnpm test:db`
 -   **Ejecutar Todo el Workspace:** `pnpm turbo build` o `pnpm dev`
 -   **Añadir Dependencias Comunes:** Use `pnpm -F <package-name> add <dep-name>`
@@ -55,6 +56,6 @@ Este documento está diseñado para proporcionar contexto técnico rápido a asi
 
 ## 🎯 Directivas para Asistentes
 
--   **Precaución:** Al modificar `apps/server`, verifica que las importaciones a `PrismaService` no se rompan por cambios de ruta (deben estar en `../prisma/PrismaService`).
--   **Consistencia:** Asegúrate de que las interfaces en `shared-types` se mantengan sincronizadas con los campos definidos en `schema.prisma`.
+-   **Precaución:** La propiedad real del schema Prisma vive en `packages/db`; no dupliques definiciones en `apps/server`.
+-   **Consistencia:** Asegúrate de que las interfaces en `shared-types` se mantengan sincronizadas con los campos definidos en `packages/db/prisma/schema.prisma`.
 -   **Testing:** Siempre que agregues lógica de juego, acompaña con un test unitario en `packages/game-logic/src/__tests__`.
