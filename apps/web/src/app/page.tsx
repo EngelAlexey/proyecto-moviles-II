@@ -36,8 +36,20 @@ import {
 } from '@dado-triple/shared-types';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
 
-const SERVER_URL = 'ws://18.218.158.112:5000';
-const REALTIME_TRANSPORT_LABEL = 'WEBSOCKET';
+const DEFAULT_REALTIME_HOST = '18.218.158.112:5000';
+
+function resolveRealtimeUrl(): string {
+  const explicitUrl = process.env.NEXT_PUBLIC_REALTIME_URL?.trim();
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return `wss://${DEFAULT_REALTIME_HOST}`;
+  }
+
+  return `ws://${DEFAULT_REALTIME_HOST}`;
+}
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
@@ -53,6 +65,7 @@ export default function ObserverWebPage() {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [serverUrl, setServerUrl] = useState<string | null>(null);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const pendingAutoObserveCreatedRoomRef = useRef(false);
@@ -105,8 +118,16 @@ export default function ObserverWebPage() {
   }, [addLog, isConnected, roomId, socket]);
 
   useEffect(() => {
+    setServerUrl(resolveRealtimeUrl());
+  }, []);
+
+  useEffect(() => {
+    if (!serverUrl) {
+      return;
+    }
+
     const client = createRealtimeClient({
-      url: SERVER_URL,
+      url: serverUrl,
       onOpen: ({ connectionId: nextConnectionId, transport }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
@@ -190,7 +211,7 @@ export default function ObserverWebPage() {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
       client.disconnect(1000, 'Component unmounted');
     };
-  }, [addLog, requestRooms]);
+  }, [addLog, requestRooms, serverUrl]);
 
   useEffect(() => {
     if (logsContainerRef.current) {

@@ -76,7 +76,16 @@ function createWebSocketClient(
       return;
     }
 
-    socket = new WebSocket(options.url);
+    try {
+      socket = new WebSocket(options.url);
+    } catch (error) {
+      socket = null;
+      options.onError?.(
+        `No fue posible inicializar el WebSocket para ${options.url}.`,
+        error,
+      );
+      return;
+    }
 
     socket.onopen = () => {
       options.onOpen?.({
