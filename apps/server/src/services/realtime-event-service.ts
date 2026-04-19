@@ -247,6 +247,26 @@ export class RealtimeEventService {
     const state = await this.coordinator.getState(roomId);
     if (state) {
       effects.push(this.toRoom(roomId, SocketEvents.GAME_UPDATE, { state }));
+
+      const roundResults = this.coordinator.getRoundResultsIfComplete(state);
+      if (roundResults) {
+        roundResults.forEach((roundResult) => {
+          effects.push(this.toRoom(roomId, SocketEvents.ROUND_RESULT, roundResult));
+        });
+
+        const nextPhase = await this.coordinator.advanceRound(roomId);
+        const latestState = await this.coordinator.getState(roomId);
+
+        if (latestState) {
+          effects.push(this.toRoom(roomId, SocketEvents.GAME_UPDATE, { state: latestState }));
+        }
+
+        if ('pairs' in nextPhase) {
+          effects.push(this.toRoom(roomId, SocketEvents.PAIRS_ASSIGNED, nextPhase));
+        } else {
+          effects.push(this.toRoom(roomId, SocketEvents.GAME_OVER, nextPhase));
+        }
+      }
     }
 
     return { effects };

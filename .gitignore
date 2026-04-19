@@ -2,6 +2,9 @@
 node_modules
 .pnpm-debug.log*
 
+# Expo
+.expo/
+
 # Build outputs
 dist
 build

@@ -117,8 +117,10 @@ describe("pairPlayers", () => {
 
   // ── Validación de rango ────────────────────────────────────────────────
 
-  test("lanza error con menos de 2 jugadores", () => {
-    expect(() => pairPlayers(makeIds(1))).toThrow(/al menos 2/);
+  test(`lanza error con menos de ${MIN_PLAYERS} jugadores`, () => {
+    expect(() => pairPlayers(makeIds(MIN_PLAYERS - 1))).toThrow(
+      new RegExp(`al menos ${MIN_PLAYERS}`),
+    );
   });
 
   test("lanza error con más de 10 jugadores", () => {

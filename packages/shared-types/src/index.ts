@@ -41,7 +41,8 @@ export interface GameState {
   sessionId: string;
   players: Player[];
   pairs: Pair[];
-  byePlayerId?: string | null;
+  byePlayerId: string | null;
+  rolledPlayerIds: string[];
   currentDice: DiceValues;
   status: GameStatus;
   round: number;

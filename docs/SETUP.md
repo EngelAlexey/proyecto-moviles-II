@@ -50,6 +50,10 @@ pnpm --filter @dado-triple/db prisma:generate
 pnpm dev
 ```
 
+Ese comando levanta `web`, `server` y `mobile` al mismo tiempo.
+
+Si ya existe otro `next dev` corriendo dentro de `apps/web`, cierralo antes para evitar el error de servidor duplicado.
+
 Servicios locales esperados:
 
 - Web: `http://localhost:3000`

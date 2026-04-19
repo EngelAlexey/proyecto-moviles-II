@@ -4,8 +4,15 @@
     "baseUrl": "src",
     "ignoreDeprecations": "5.0",
     "paths": {
-      "@/*": ["*"]
+      "@/*": [
+        "*"
+      ]
     }
   },
-  "include": ["src/**/*", "next-env.d.ts", "**/*.ts", "**/*.tsx"]
+  "include": [
+    "src/**/*",
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }

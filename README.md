@@ -71,6 +71,14 @@ Para levantar el monorepo:
 pnpm dev
 ```
 
+Ese comando levanta:
+
+- `apps/web`
+- `apps/server`
+- `apps/mobile`
+
+Si ya tienes otro `next dev` abierto en `apps/web`, cierralo antes o `pnpm dev` fallara por servidor duplicado.
+
 Servicios locales:
 
 - Web: `http://localhost:3000`
