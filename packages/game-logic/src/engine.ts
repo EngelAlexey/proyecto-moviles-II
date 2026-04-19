@@ -64,9 +64,9 @@ export function shuffle<T>(
 }
 
 /**
- * Agrupa entre 5 y 10 jugadores en parejas de forma aleatoria.
+ * Agrupa entre 2 y 10 jugadores en parejas de forma aleatoria.
  *
- * - Lanza error si hay menos de 5 o más de 10 jugadores.
+ * - Lanza error si hay menos de 2 o más de 10 jugadores.
  * - Si el número de jugadores es impar, uno queda en "bye" (descansa la ronda).
  *
  * @param playerIds - Lista de identificadores de jugadores.

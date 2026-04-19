@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from "@
 import {
   SocketEvents,
   type GameState,
+  type PairsAssignedPayload,
   type RoomCreatedPayload,
   type RoomsListPayload,
 } from "@dado-triple/shared-types";
@@ -138,6 +139,13 @@ describe("Socket Integration Flow", () => {
       {},
       {
         event: SocketEvents.JOIN_GAME,
+        payload: { roomId: "room-a", playerName: "Carol" },
+      },
+    );
+    await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
         payload: { roomId: "room-b", playerName: "Bob" },
       },
     );
@@ -146,6 +154,7 @@ describe("Socket Integration Flow", () => {
     const roomBState = stateStore.get("room-b");
     expect(roomAState).toBeTruthy();
     expect(roomBState).toBeTruthy();
+    expect(roomAState?.players).toHaveLength(2);
 
     roomAState!.status = "playing";
     roomBState!.status = "playing";
@@ -167,6 +176,7 @@ describe("Socket Integration Flow", () => {
 
     expect(roomEffects.length).toBeGreaterThan(0);
     expect(roomEffects.every((effect) => effect.roomId === "room-a")).toBe(true);
+    expect(roomEffects.some((effect) => effect.message.event === SocketEvents.DICE_ROLLED)).toBe(true);
   });
 
   test("observer can join a room but cannot execute player actions", async () => {
@@ -214,5 +224,58 @@ describe("Socket Integration Flow", () => {
     } finally {
       client.disconnect();
     }
+  });
+
+  test("the round advances after all active players roll", async () => {
+    const realtime = new RealtimeEventService(coordinator);
+    const roomId = "room-rounds";
+
+    const aliceJoin = await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId, playerName: "Alice" },
+      },
+    );
+    const bobJoin = await realtime.handleClientMessage(
+      {},
+      {
+        event: SocketEvents.JOIN_GAME,
+        payload: { roomId, playerName: "Bob" },
+      },
+    );
+
+    await realtime.handleClientMessage(aliceJoin.nextContext ?? {}, {
+      event: SocketEvents.PLAYER_READY,
+      payload: { roomId, playerId: "alice" },
+    });
+
+    await realtime.handleClientMessage(bobJoin.nextContext ?? {}, {
+      event: SocketEvents.PLAYER_READY,
+      payload: { roomId, playerId: "bob" },
+    });
+
+    const firstRoll = await realtime.handleClientMessage(aliceJoin.nextContext ?? {}, {
+      event: SocketEvents.ROLL_DICE,
+      payload: { roomId, playerId: "alice" },
+    });
+
+    expect(firstRoll.effects.some((effect) => effect.message.event === SocketEvents.ROUND_RESULT)).toBe(false);
+
+    const secondRoll = await realtime.handleClientMessage(bobJoin.nextContext ?? {}, {
+      event: SocketEvents.ROLL_DICE,
+      payload: { roomId, playerId: "bob" },
+    });
+
+    expect(secondRoll.effects.some((effect) => effect.message.event === SocketEvents.ROUND_RESULT)).toBe(true);
+
+    const nextRoundPairing = secondRoll.effects.find(
+      (effect): effect is Extract<typeof secondRoll.effects[number], { scope: "room" }> =>
+        effect.scope === "room" && effect.message.event === SocketEvents.PAIRS_ASSIGNED,
+    );
+
+    expect(nextRoundPairing).toBeTruthy();
+    expect((nextRoundPairing?.message.payload as PairsAssignedPayload).round).toBe(2);
+    expect(stateStore.get(roomId)?.round).toBe(2);
   });
 });

@@ -49,6 +49,8 @@ export class GameCoordinator {
       sessionId: session.id,
       players: [],
       pairs: [],
+      byePlayerId: null,
+      rolledPlayerIds: [],
       currentDice: [0, 0, 0],
       status: "waiting",
       round: 0,
@@ -140,6 +142,9 @@ export class GameCoordinator {
     const playerIds = state.players.map((p) => p.id);
     const { pairs, bye } = pairPlayers(playerIds);
     state.pairs = pairs;
+    state.byePlayerId = bye;
+    state.rolledPlayerIds = [];
+    state.currentDice = [0, 0, 0];
 
     // Actualizar Prisma
     await this.prisma.gameSessionModel.update({
@@ -173,6 +178,12 @@ export class GameCoordinator {
 
     const playerInGame = state.players.find((p) => p.id === playerId);
     if (!playerInGame) throw new Error("Jugador no encontrado en la sala.");
+    if (state.byePlayerId === playerId) {
+      throw new Error("Este jugador tiene bye en la ronda actual y no debe lanzar dados.");
+    }
+    if (state.rolledPlayerIds.includes(playerId)) {
+      throw new Error("Este jugador ya lanzó los dados en la ronda actual.");
+    }
 
     // Motor puro
     const dice = rollDice();
@@ -182,12 +193,26 @@ export class GameCoordinator {
     // Actualizar estado en Redis
     playerInGame.score += score;
     state.currentDice = dice;
+    state.rolledPlayerIds.push(playerId);
     await this.redis.saveGameState(roomId, state);
 
     // Persistir movimiento en Prisma (fire-and-forget, no bloquea el hilo)
     this.persistMovement(state.sessionId, playerId, dice, combo, score);
 
     return { playerId, dice, combo, score };
+  }
+
+  getRoundResultsIfComplete(state: GameState): RoundResultPayload[] | null {
+    if (state.status !== "playing") {
+      return null;
+    }
+
+    const playersExpectedToRoll = state.players.length - (state.byePlayerId ? 1 : 0);
+    if (state.rolledPlayerIds.length < playersExpectedToRoll) {
+      return null;
+    }
+
+    return state.pairs.map((pair) => this.evaluateRound(state, pair));
   }
 
   // ── Resolución de ronda ──────────────────────────────────────────────────
@@ -224,6 +249,9 @@ export class GameCoordinator {
     const playerIds = state.players.map((p) => p.id);
     const { pairs, bye } = pairPlayers(playerIds);
     state.pairs = pairs;
+    state.byePlayerId = bye;
+    state.rolledPlayerIds = [];
+    state.currentDice = [0, 0, 0];
 
     await this.redis.saveGameState(roomId, state);
     return { pairs, bye, round: state.round };
@@ -277,6 +305,8 @@ export class GameCoordinator {
 
     if (state.players.length === 0) {
       state.pairs = [];
+      state.byePlayerId = null;
+      state.rolledPlayerIds = [];
       state.currentDice = [0, 0, 0];
       state.round = 0;
 
@@ -330,6 +360,22 @@ export class GameCoordinator {
     if (uniquePlayers.length !== state.players.length) {
       console.log(`[GameCoordinator] Auto-sanación: Limpiando ${state.players.length - uniquePlayers.length} duplicados en ${roomId}`);
       state.players = uniquePlayers;
+      await this.redis.saveGameState(roomId, state);
+    }
+
+    let wasNormalized = false;
+
+    if (!("byePlayerId" in state)) {
+      (state as GameState & { byePlayerId: string | null }).byePlayerId = null;
+      wasNormalized = true;
+    }
+
+    if (!("rolledPlayerIds" in state)) {
+      (state as GameState & { rolledPlayerIds: string[] }).rolledPlayerIds = [];
+      wasNormalized = true;
+    }
+
+    if (wasNormalized) {
       await this.redis.saveGameState(roomId, state);
     }
 
