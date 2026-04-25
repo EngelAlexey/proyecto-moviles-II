@@ -15,10 +15,8 @@ import {
   type RoomsListPayload,
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
+import { REALTIME_SERVER_URL, REALTIME_TRANSPORT_LABEL } from '@/lib/realtime-config';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
-
-const SERVER_URL = 'ws://18.218.158.112:5000';
-const REALTIME_TRANSPORT_LABEL = 'WEBSOCKET';
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
@@ -92,7 +90,7 @@ export default function ObserverWebPage() {
 
   useEffect(() => {
     const client = createRealtimeClient({
-      url: SERVER_URL,
+      url: REALTIME_SERVER_URL,
       onOpen: ({ connectionId: nextConnectionId, transport }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
@@ -201,7 +199,9 @@ export default function ObserverWebPage() {
           {observedRoomId ?? '-'} | MODO: {REALTIME_TRANSPORT_LABEL} | ID:{' '}
           {connectionId ?? '-'}
         </div>
-        <div className="mt-2 text-xs text-slate-400 font-mono">URL activa: {SERVER_URL}</div>
+        <div className="mt-2 text-xs text-slate-400 font-mono">
+          URL activa: {REALTIME_SERVER_URL}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6 max-w-7xl mx-auto">

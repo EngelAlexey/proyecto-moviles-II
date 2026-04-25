@@ -20,10 +20,8 @@ import {
   type RoomCreatedPayload,
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
+import { REALTIME_SERVER_URL, REALTIME_TRANSPORT_LABEL } from './src/lib/realtime-config';
 import { createRealtimeClient, type RealtimeClient } from './src/lib/realtime-client';
-
-const SERVER_URL = 'ws://18.218.158.112:5000';
-const REALTIME_TRANSPORT_LABEL = 'WEBSOCKET';
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
@@ -82,7 +80,7 @@ export default function App() {
 
   useEffect(() => {
     const client = createRealtimeClient({
-      url: SERVER_URL,
+      url: REALTIME_SERVER_URL,
       onOpen: ({ connectionId: nextConnectionId, transport, url }) => {
         setIsConnected(true);
         setConnectionId(nextConnectionId);
@@ -161,7 +159,7 @@ export default function App() {
       }),
     ];
 
-    addLog(`Intentando conectar con websocket -> ${SERVER_URL}`);
+    addLog(`Intentando conectar con websocket -> ${REALTIME_SERVER_URL}`);
     client.connect();
     setSocket(client);
 
@@ -242,7 +240,7 @@ export default function App() {
         {(activeTransport ?? 'websocket').toUpperCase()} | ID:{' '}
         {connectionId ?? '-'}
       </Text>
-      <Text style={styles.status}>URL activa: {activeUrl ?? SERVER_URL}</Text>
+      <Text style={styles.status}>URL activa: {activeUrl ?? REALTIME_SERVER_URL}</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>1. Crear o unirse como jugador</Text>

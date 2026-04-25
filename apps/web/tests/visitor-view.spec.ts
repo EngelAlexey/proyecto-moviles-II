@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+const EXPECTED_REALTIME_URL =
+  process.env.NEXT_PUBLIC_REALTIME_URL?.trim() || 'ws://3.142.78.130:5000';
+
 test('visitor can connect to the distributed websocket server and auto-observe a created room', async ({
   page,
   browserName,
@@ -9,7 +12,7 @@ test('visitor can connect to the distributed websocket server and auto-observe a
   await page.goto('/');
 
   await expect(page.locator('h1')).toHaveText('Dado Triple - Web Observer Console');
-  await expect(page.locator('text=URL activa: ws://18.218.158.112:5000')).toBeVisible({
+  await expect(page.locator(`text=URL activa: ${EXPECTED_REALTIME_URL}`)).toBeVisible({
     timeout: 15000,
   });
   await expect(page.locator('text=SOCKET: CONECTADO')).toBeVisible({ timeout: 15000 });
