@@ -1,13 +1,12 @@
 {
-  "extends": "@dado-triple/typescript-config/react-native.json",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["*"]
-    },
-    "types": ["node", "react", "jest"],
-    "typeRoots": ["./node_modules/@types"],
+    "strict": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "App.tsx"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
 }
-

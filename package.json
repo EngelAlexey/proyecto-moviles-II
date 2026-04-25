@@ -4,9 +4,14 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:no-mobile": "turbo run dev --filter=@dado-triple/web --filter=@dado-triple/server",
+    "dev:mobile": "pnpm --filter @dado-triple/mobile start",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "test": "turbo run test",
+    "deploy:web": "cd apps/web && vercel --prod",
+    "mobile:build:android:preview": "pnpm --filter @dado-triple/mobile build:android:preview",
+    "mobile:build:android:production": "pnpm --filter @dado-triple/mobile build:android:production",
     "prepare": "husky"
   },
   "devDependencies": {

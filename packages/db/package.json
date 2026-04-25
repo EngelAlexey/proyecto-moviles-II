@@ -1,0 +1,21 @@
+{
+  "name": "@dado-triple/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "prisma generate --schema ./prisma/schema.prisma && tsc",
+    "dev": "prisma generate --schema ./prisma/schema.prisma && tsc --watch",
+    "prisma:generate": "prisma generate --schema ./prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2"
+  },
+  "devDependencies": {
+    "@dado-triple/typescript-config": "workspace:*",
+    "prisma": "^6.19.2",
+    "typescript": "latest"
+  }
+}

@@ -117,9 +117,10 @@ describe("pairPlayers", () => {
 
   // ── Validación de rango ────────────────────────────────────────────────
 
-  test("lanza error con menos de 5 jugadores", () => {
-    expect(() => pairPlayers(makeIds(4))).toThrow(/al menos 5/);
-    expect(() => pairPlayers(makeIds(1))).toThrow(/al menos 5/);
+  test(`lanza error con menos de ${MIN_PLAYERS} jugadores`, () => {
+    expect(() => pairPlayers(makeIds(MIN_PLAYERS - 1))).toThrow(
+      new RegExp(`al menos ${MIN_PLAYERS}`),
+    );
   });
 
   test("lanza error con más de 10 jugadores", () => {
@@ -129,7 +130,7 @@ describe("pairPlayers", () => {
 
   // ── Número par de jugadores ────────────────────────────────────────────
 
-  test.each([6, 8, 10])(
+  test.each([2, 4, 6, 8, 10])(
     "con %i jugadores (par) no hay bye y las parejas cubren a todos",
     (n) => {
       const ids = makeIds(n);
@@ -145,7 +146,7 @@ describe("pairPlayers", () => {
 
   // ── Número impar de jugadores ──────────────────────────────────────────
 
-  test.each([5, 7, 9])(
+  test.each([3, 5, 7, 9])(
     "con %i jugadores (impar) hay exactamente un bye",
     (n) => {
       const ids = makeIds(n);
