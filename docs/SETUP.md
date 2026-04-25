@@ -62,17 +62,36 @@ Servicios locales esperados:
 
 ## Realtime distribuido
 
-Web y Mobile usan WebSocket nativo fijo contra:
+Web y Mobile usan WebSocket nativo contra el endpoint configurado en sus `.env`.
+Valores actuales:
 
 ```txt
-ws://18.218.158.112:5000
+ws://3.142.78.130:5000
 ```
 
 Eso significa:
 
-- no hace falta configurar variables de entorno para el transporte realtime
+- si la IP publica cambia, el ajuste se hace en:
+  - `apps/web/.env`
+  - `apps/mobile/.env`
+  - `apps/web/.env.example`
+  - `apps/mobile/.env.example`
 - `localhost` y `10.0.2.2` ya no se usan en los clientes
 - para que el flujo realtime funcione, el servidor Rust en AWS debe estar levantado
+
+Variables usadas:
+
+```env
+NEXT_PUBLIC_REALTIME_TRANSPORT=websocket
+NEXT_PUBLIC_REALTIME_URL=ws://3.142.78.130:5000
+EXPO_PUBLIC_REALTIME_TRANSPORT=websocket
+EXPO_PUBLIC_REALTIME_URL=ws://3.142.78.130:5000
+```
+
+Los `.env` reales son locales y no se versionan. Por eso tambien se actualizan:
+
+- `apps/web/.env.example`
+- `apps/mobile/.env.example`
 
 La guia operativa del servidor en AWS esta en [WEBSOCKET_DISTRIBUIDO.md](./WEBSOCKET_DISTRIBUIDO.md).
 

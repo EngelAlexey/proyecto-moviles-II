@@ -36,19 +36,10 @@ import {
 } from '@dado-triple/shared-types';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
 
-const DEFAULT_REALTIME_HOST = 'proyecto-moviles-ii.onrender.com';
+const DEFAULT_REALTIME_URL = 'ws://3.142.78.130:5000';
 
 function resolveRealtimeUrl(): string {
-  const explicitUrl = process.env.NEXT_PUBLIC_REALTIME_URL?.trim();
-  if (explicitUrl) {
-    return explicitUrl;
-  }
-
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    return `wss://${DEFAULT_REALTIME_HOST}`;
-  }
-
-  return `ws://${DEFAULT_REALTIME_HOST}`;
+  return process.env.NEXT_PUBLIC_REALTIME_URL?.trim() || DEFAULT_REALTIME_URL;
 }
 
 function timestamp(): string {

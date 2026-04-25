@@ -1,6 +1,7 @@
-import { io, type Socket } from 'socket.io-client';
 import {
   SERVER_SOCKET_EVENTS,
+  parseSocketMessage,
+  serializeSocketMessage,
   type ClientSocketMessage,
   type ClientSocketEvent,
   type ClientSocketEventMap,
@@ -9,8 +10,9 @@ import {
 } from '@dado-triple/shared-types';
 
 export interface LifecycleMeta {
-  transport: 'websocket' | 'polling';
+  transport: 'websocket';
   connectionId: string | null;
+  url: string;
   reason?: string;
 }
 
@@ -61,66 +63,99 @@ function createRegistry() {
 
 export function createRealtimeClient(options: CreateRealtimeClientOptions): RealtimeClient {
   const registry = createRegistry();
-  
-  let socket: Socket | null = null;
+  return createWebSocketClient(options, registry);
+}
+
+function createWebSocketClient(
+  options: CreateRealtimeClientOptions,
+  registry: ReturnType<typeof createRegistry>,
+): RealtimeClient {
+  let socket: WebSocket | null = null;
 
   const connect = () => {
-    if (socket && socket.connected) {
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    socket = io(options.url, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-    });
+    socket = new WebSocket(options.url);
 
-    socket.on('connect', () => {
-      const id = socket?.id || null;
-      let transportName = 'websocket';
-      if (socket && socket.io && socket.io.engine && socket.io.engine.transport) {
-        transportName = socket.io.engine.transport.name;
-      }
-      
+    socket.onopen = () => {
       options.onOpen?.({
-        transport: transportName as 'websocket' | 'polling',
-        connectionId: id,
+        transport: 'websocket',
+        connectionId: null,
+        url: options.url,
       });
-    });
+    };
 
-    socket.on('disconnect', (reason) => {
+    socket.onclose = (event: any) => {
       options.onClose?.({
         transport: 'websocket',
         connectionId: null,
-        reason: reason,
+        reason: formatWebSocketCloseReason(event),
+        url: options.url,
       });
-    });
+    };
 
-    socket.on('connect_error', (error) => {
-      options.onError?.('No fue posible conectar con el servidor en tiempo real.', error);
-    });
+    socket.onerror = (event: any) => {
+      options.onError?.('No fue posible conectar con el WebSocket nativo.', event);
+    };
 
-    SERVER_SOCKET_EVENTS.forEach((eventName) => {
-      socket?.on(eventName, (payload) => {
-        registry.emit(eventName, payload);
-      });
-    });
+    socket.onmessage = (event: any) => {
+      const raw = typeof event?.data === 'string' ? event.data : String(event?.data);
+      const parsed = parseSocketMessage(raw);
+
+      if (!parsed) {
+        options.onError?.('Se recibio un mensaje WebSocket invalido.', raw);
+        return;
+      }
+
+      if (!SERVER_SOCKET_EVENTS.includes(parsed.event as ServerSocketEvent)) {
+        return;
+      }
+
+      registry.emit(
+        parsed.event as ServerSocketEvent,
+        parsed.payload as ServerSocketEventMap[ServerSocketEvent],
+      );
+    };
   };
 
   return {
     connect,
-    disconnect: () => {
-      socket?.disconnect();
+    disconnect: (code, reason) => {
+      socket?.close(code, reason);
       socket = null;
     },
-    getConnectionId: () => socket?.id || null,
+    getConnectionId: () => null,
     on: (event, listener) => registry.on(event, listener),
     send: (event, payload) => {
-      if (!socket || !socket.connected) {
-        options.onError?.('No hay una conexion abierta para enviar mensajes.');
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        options.onError?.('No hay una conexion WebSocket abierta para enviar mensajes.');
         return;
       }
 
-      socket.emit(event, payload);
+      const message = {
+        event,
+        payload,
+      } as ClientSocketMessage;
+
+      socket.send(serializeSocketMessage(message));
     },
   };
+}
+
+function formatWebSocketCloseReason(event: { code?: number; reason?: string } | undefined): string {
+  if (!event) {
+    return 'closed';
+  }
+
+  if (event.reason) {
+    return `code ${event.code ?? 'unknown'}: ${event.reason}`;
+  }
+
+  if (typeof event.code === 'number') {
+    return `code ${event.code}`;
+  }
+
+  return 'closed';
 }

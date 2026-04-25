@@ -20,20 +20,31 @@ Monorepo del proyecto Dado Triple con web, mobile, backend Node y contrato compa
 
 ## Realtime actual
 
-Los clientes web y mobile usan WebSocket nativo fijo contra:
+Los clientes web y mobile usan WebSocket nativo contra el endpoint definido en:
+
+- `apps/web/.env`
+- `apps/web/.env.example`
+- `apps/mobile/.env`
+- `apps/mobile/.env.example`
+
+Valor actual verificado:
 
 ```txt
-ws://18.218.158.112:5000
+ws://3.142.78.130:5000
 ```
 
-No dependen de:
+Variables usadas:
 
-- `localhost`
-- `10.0.2.2`
 - `NEXT_PUBLIC_REALTIME_TRANSPORT`
 - `NEXT_PUBLIC_REALTIME_URL`
 - `EXPO_PUBLIC_REALTIME_TRANSPORT`
 - `EXPO_PUBLIC_REALTIME_URL`
+
+Ya no dependen de:
+
+- `localhost`
+- `10.0.2.2`
+- una constante hardcodeada dentro de la UI
 
 Roles esperados:
 
@@ -95,6 +106,7 @@ Importante:
 
 - aunque levantes el monorepo localmente, web y mobile seguiran conectando al WebSocket distribuido en AWS
 - la guia operativa del servicio Rust y `systemd` esta en [docs/WEBSOCKET_DISTRIBUIDO.md](./docs/WEBSOCKET_DISTRIBUIDO.md)
+- si AWS vuelve a rotar la IP publica, actualiza los `.env` de `apps/web` y `apps/mobile`; con Elastic IP ese cambio deja de ser recurrente
 
 ## Testing
 

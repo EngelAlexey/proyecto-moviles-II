@@ -73,7 +73,7 @@ ws://<IP_PUBLICA>:5000
 
 Ejemplo:
 
-const SERVER_URL = 'ws://18.218.158.112:5000';
+const SERVER_URL = process.env.EXPO_PUBLIC_REALTIME_URL ?? 'ws://3.142.78.130:5000';
 Eliminación de override global
 
 Se deshabilitó el factory global que forzaba el uso de Socket.IO:
@@ -88,7 +88,7 @@ export function createRealtimeClient(...) {
 }
 Pruebas de Conectividad
 Prueba manual en navegador
-const ws = new WebSocket("ws://18.218.158.112:5000");
+const ws = new WebSocket(process.env.EXPO_PUBLIC_REALTIME_URL ?? "ws://3.142.78.130:5000");
 
 ws.onopen = () => console.log("CONECTADO");
 ws.onerror = (e) => console.log("ERROR", e);

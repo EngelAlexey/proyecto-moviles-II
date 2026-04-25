@@ -1,5 +1,37 @@
 # Cambios Realizados: Soporte Multi-Sala y Roles en Realtime
 
+## Cambio de infraestructura documentado el 24 de abril de 2026
+
+Durante la validacion del socket en AWS se confirmo un cambio de IP publica:
+
+- IP publica anterior: `3.18.110.24`
+- IP publica actual verificada: `3.142.78.130`
+
+La causa fue que la instancia estaba usando una IP publica automatica de EC2 y no una Elastic IP.
+
+Para evitar volver a tocar la UI por estos cambios:
+
+- `apps/web/src/app/page.tsx` ya no debe volver a hardcodear la URL del socket
+- `apps/mobile/App.tsx` ya no debe volver a hardcodear la URL del socket
+
+El cambio futuro del endpoint debe hacerse solo en:
+
+- `apps/web/.env`                -> valor local real
+- `apps/web/.env.example`        -> referencia compartida
+- `apps/mobile/.env`             -> valor local real
+- `apps/mobile/.env.example`     -> referencia compartida
+
+Y el codigo ahora lee esas variables desde:
+
+- `apps/web/src/lib/realtime-config.ts`
+- `apps/mobile/src/lib/realtime-config.ts`
+
+Si se asigna una Elastic IP en AWS, normalmente ya no habra que repetir cambios por rotaciones de IP despues de reinicios o stop/start de la instancia. Solo habria que actualizar estos archivos otra vez si:
+
+- cambias manualmente a otra Elastic IP
+- migras a un dominio propio
+- migras a `wss://` con TLS/proxy
+
 ## Estado General
 
 Se implementó en el repositorio el soporte para múltiples salas independientes en el sistema realtime, eliminando la dependencia de una sala fija compartida.
@@ -465,8 +497,8 @@ Qué se hizo:
 
 Configuración actual por defecto:
 
-- websocket: `ws://18.218.158.112:5000`
-- fallback socket.io: `http://18.218.158.112:4000`
+- websocket: `ws://3.142.78.130:5000`
+- fallback socket.io: `http://3.142.78.130:4000`
 
 ### Ajustes de tipado en mobile
 
