@@ -12,6 +12,7 @@ import {
 export interface LifecycleMeta {
   transport: 'websocket';
   connectionId: string | null;
+  url: string;
   reason?: string;
 }
 
@@ -144,32 +145,34 @@ function createWebSocketClient(
       options.onOpen?.({
         transport: 'websocket',
         connectionId: null,
+        url: options.url,
       });
     };
 
-    nextSocket.onclose = (event) => {
+    nextSocket.onclose = (event: any) => {
       if (socket === nextSocket) {
         socket = null;
       }
 
       clearConnectionTimeout();
 
-      const reason = event.reason || `closed-${event.code}`;
+      const reason = formatWebSocketCloseReason(event);
       options.onClose?.({
         transport: 'websocket',
         connectionId: null,
         reason,
+        url: options.url,
       });
 
       scheduleReconnect(reason);
     };
 
-    nextSocket.onerror = (event) => {
+    nextSocket.onerror = (event: any) => {
       options.onError?.('No fue posible conectar con el WebSocket nativo.', event);
     };
 
-    nextSocket.onmessage = (event) => {
-      const raw = typeof event.data === 'string' ? event.data : String(event.data);
+    nextSocket.onmessage = (event: any) => {
+      const raw = typeof event?.data === 'string' ? event.data : String(event?.data);
       const parsed = parseSocketMessage(raw);
 
       if (!parsed) {
@@ -214,4 +217,20 @@ function createWebSocketClient(
       socket.send(serializeSocketMessage(message));
     },
   };
+}
+
+function formatWebSocketCloseReason(event: { code?: number; reason?: string } | undefined): string {
+  if (!event) {
+    return 'closed';
+  }
+
+  if (event.reason) {
+    return `code ${event.code ?? 'unknown'}: ${event.reason}`;
+  }
+
+  if (typeof event.code === 'number') {
+    return `code ${event.code}`;
+  }
+
+  return 'closed';
 }

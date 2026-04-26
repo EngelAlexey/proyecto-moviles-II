@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: dado-triple-server
+    runtime: node
+    rootDir: .
+    autoDeploy: true
+    healthCheckPath: /health
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @dado-triple/db prisma:generate && pnpm --filter @dado-triple/server build
+    startCommand: pnpm --filter @dado-triple/server start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: PORT
+        value: "4000"

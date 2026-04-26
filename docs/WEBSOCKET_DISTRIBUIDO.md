@@ -2,22 +2,85 @@
 
 Esta guia explica como mantener operativo el servidor WebSocket en Rust para que el equipo completo pueda conectarse desde web y mobile sin depender de `localhost`.
 
-## Endpoint fijo
+## Endpoint actual
 
-Los clientes del proyecto usan WebSocket nativo contra:
+Los clientes del proyecto usan WebSocket nativo contra la URL configurada en:
+
+- `apps/web/.env`
+- `apps/mobile/.env`
+- `apps/web/.env.example`
+- `apps/mobile/.env.example`
+
+Nota:
+
+- los archivos `.env` reales son locales y estan ignorados por Git
+- los archivos `.env.example` son la referencia compartida que si queda en el repo
+
+Valor actual verificado el 24 de abril de 2026:
 
 ```txt
-ws://18.218.158.112:5000
+ws://3.142.78.130:5000
 ```
 
-La configuracion ya no depende de:
+Variables usadas:
 
 - `NEXT_PUBLIC_REALTIME_TRANSPORT`
 - `NEXT_PUBLIC_REALTIME_URL`
 - `EXPO_PUBLIC_REALTIME_TRANSPORT`
 - `EXPO_PUBLIC_REALTIME_URL`
-- `localhost`
-- `10.0.2.2`
+
+## Cambio de IP que ya ocurrio
+
+La IP publica anterior era:
+
+```txt
+3.18.110.24
+```
+
+La IP publica intermedia que se uso antes de la Elastic IP fue:
+
+```txt
+18.218.158.112
+```
+
+La Elastic IP asignada y estable ahora es:
+
+```txt
+3.142.78.130
+```
+
+Los cambios anteriores ocurrieron porque la instancia estaba usando una IP publica automatica de EC2, no una Elastic IP.
+
+## Como evitar futuros cambios con Elastic IP
+
+Una Elastic IP es una IPv4 publica estatica reservada para tu cuenta de AWS.
+
+Ventaja principal:
+
+- aunque detengas o reinicies la instancia, la IP publica no cambia
+
+Pasos en AWS:
+
+1. EC2 -> Elastic IPs
+2. `Allocate Elastic IP address`
+3. Selecciona la nueva Elastic IP
+4. `Actions -> Associate Elastic IP address`
+5. Asociala a la instancia `Moviles_Socket`
+6. Confirma que el Security Group siga permitiendo `TCP 5000`
+
+Despues de asociarla:
+
+1. usa `ws://3.142.78.130:5000` como endpoint estable actual
+2. actualiza:
+   - `apps/web/.env`
+   - `apps/mobile/.env`
+   - `apps/web/.env.example`
+   - `apps/mobile/.env.example`
+3. reinicia:
+   - `pnpm --filter @dado-triple/web dev`
+   - `pnpm --filter @dado-triple/mobile start`
+
+Con Elastic IP ya no deberias repetir ese cambio por cada stop/start normal de la instancia.
 
 ## Comportamiento esperado de los clientes
 
@@ -101,7 +164,7 @@ Senales sanas esperadas:
 1. Ejecuta `pnpm --filter @dado-triple/web dev`
 2. Abre `http://localhost:3000`
 3. Verifica `SOCKET: CONECTADO`
-4. Verifica `URL activa: ws://18.218.158.112:5000`
+4. Verifica `URL activa: ws://3.142.78.130:5000`
 5. Usa `CREAR SALA (PRUEBA)` solo para QA
 6. Confirma que la web recibe `ROOM_CREATED`, `ROOMS_LIST` y `GAME_UPDATE`
 

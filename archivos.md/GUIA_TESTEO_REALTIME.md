@@ -4,8 +4,9 @@ Estado validado local y remoto el 2026-04-15.
 
 ## Endpoint actual
 
-- WebSocket AWS: `ws://18.218.158.112:5000`
-- Fallback Socket.IO historico: `http://18.218.158.112:4000`
+- WebSocket AWS: `ws://3.142.78.130:5000`
+- Fallback Socket.IO historico: `http://3.142.78.130:4000`
+- Si la IP publica cambia otra vez, actualiza `apps/web/.env` y `apps/mobile/.env`
 
 ## Roles esperados
 
@@ -21,7 +22,7 @@ Archivo: `apps/web/.env`
 
 ```env
 NEXT_PUBLIC_REALTIME_TRANSPORT=websocket
-NEXT_PUBLIC_REALTIME_URL=ws://18.218.158.112:5000
+NEXT_PUBLIC_REALTIME_URL=ws://3.142.78.130:5000
 ```
 
 ### Mobile
@@ -30,7 +31,7 @@ Archivo: `apps/mobile/.env`
 
 ```env
 EXPO_PUBLIC_REALTIME_TRANSPORT=websocket
-EXPO_PUBLIC_REALTIME_URL=ws://18.218.158.112:5000
+EXPO_PUBLIC_REALTIME_URL=ws://3.142.78.130:5000
 ```
 
 ## Flujo minimo para probar
@@ -73,4 +74,4 @@ Ademas, se valido contra el backend remoto real:
 
 ## Riesgo conocido
 
-Si la web se despliega bajo `https://`, luego habra que mover el socket a `wss://` con TLS o proxy reverso. Para pruebas locales con `http://localhost:3000`, `ws://18.218.158.112:5000` funciona bien.
+Si la web se despliega bajo `https://`, luego habra que mover el socket a `wss://` con TLS o proxy reverso. Para pruebas locales con `http://localhost:3000`, `ws://3.142.78.130:5000` funciona bien.

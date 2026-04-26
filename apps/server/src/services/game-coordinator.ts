@@ -1,9 +1,8 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@dado-triple/db";
 import type {
   DiceValues,
   DiceCombo,
   GameState,
-  GameStatus,
   Player,
   Pair,
   DiceRolledPayload,
@@ -22,12 +21,6 @@ import {
 import { RedisService } from "./redis.service.js";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
-
-interface DiceResult {
-  dice: DiceValues;
-  combo: DiceCombo;
-  score: number;
-}
 
 // ─── Coordinator ─────────────────────────────────────────────────────────────
 
@@ -303,6 +296,10 @@ export class GameCoordinator {
 
     state.players = state.players.filter((p) => p.id !== playerId);
 
+    if (state.byePlayerId === playerId) {
+      state.byePlayerId = null;
+    }
+
     if (state.players.length === 0) {
       state.pairs = [];
       state.byePlayerId = null;
@@ -345,6 +342,7 @@ export class GameCoordinator {
   private async requireState(roomId: string): Promise<GameState> {
     let state = await this.redis.getGameState(roomId);
     if (!state) throw new Error(`Sala "${roomId}" no encontrada.`);
+    state.byePlayerId = state.byePlayerId ?? null;
 
     // SISTEMA DE AUTO-SANACIÓN (Deduplicación de jugadores corruptos en Redis)
     const uniquePlayers: Player[] = [];
@@ -390,18 +388,43 @@ export class GameCoordinator {
     combo: DiceCombo,
     score: number,
   ): void {
-    this.prisma.movementModel
-      .create({
-        data: {
-          sessionId,
-          playerId,
-          diceValues: [dice[0], dice[1], dice[2]],
-          comboType: combo,
-          scoreEarned: score,
-        },
-      })
-      .catch((err: Error) => {
-        console.error("[GameCoordinator] Error al persistir movimiento:", err.message);
-      });
+    const data: Prisma.MovementModelUncheckedCreateInput = {
+      sessionId,
+      playerId,
+      diceValues: [dice[0], dice[1], dice[2]],
+      comboType: combo,
+      scoreEarned: score,
+    };
+
+    void this.retryPersistMovement(data);
+  }
+
+  private async retryPersistMovement(
+    data: Prisma.MovementModelUncheckedCreateInput,
+    maxRetries = 3,
+    delayMs = 1000,
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+      try {
+        await this.prisma.movementModel.create({ data });
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[GameCoordinator] Fallo al persistir movimiento (intento ${attempt}/${maxRetries}): ${message}`,
+        );
+
+        if (attempt >= maxRetries) {
+          console.error(
+            `[GameCoordinator] Carga descartada tras ${maxRetries} intentos fallidos - MongoDB no responde.`,
+          );
+          return;
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, delayMs * Math.pow(2, attempt - 1)),
+        );
+      }
+    }
   }
 }

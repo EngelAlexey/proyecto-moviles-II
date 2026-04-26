@@ -10,13 +10,13 @@ El proyecto usa un monorepo con clientes web y mobile, un backend Node para serv
 
 - Next.js
 - funciona como `observer`
-- consume el endpoint fijo `ws://18.218.158.112:5000`
+- consume el endpoint configurado en `apps/web/.env`
 
 ### Mobile
 
 - React Native con Expo
 - funciona como `player`
-- consume el mismo endpoint fijo `ws://18.218.158.112:5000`
+- consume el endpoint configurado en `apps/mobile/.env`
 
 ### Backend Node
 
@@ -33,7 +33,7 @@ El proyecto usa un monorepo con clientes web y mobile, un backend Node para serv
 
 ## Flujo de comunicacion
 
-1. El cliente abre un WebSocket contra `ws://18.218.158.112:5000`
+1. El cliente abre un WebSocket contra la URL configurada en su `.env`
 2. El cliente envia mensajes `{ event, payload }`
 3. El servidor procesa la accion segun sala y rol
 4. El estado del juego se actualiza

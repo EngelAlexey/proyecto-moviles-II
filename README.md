@@ -20,20 +20,31 @@ Monorepo del proyecto Dado Triple con web, mobile, backend Node y contrato compa
 
 ## Realtime actual
 
-Los clientes web y mobile usan WebSocket nativo fijo contra:
+Los clientes web y mobile usan WebSocket nativo contra el endpoint definido en:
+
+- `apps/web/.env`
+- `apps/web/.env.example`
+- `apps/mobile/.env`
+- `apps/mobile/.env.example`
+
+Valor actual verificado:
 
 ```txt
-ws://18.218.158.112:5000
+ws://3.142.78.130:5000
 ```
 
-No dependen de:
+Variables usadas:
 
-- `localhost`
-- `10.0.2.2`
 - `NEXT_PUBLIC_REALTIME_TRANSPORT`
 - `NEXT_PUBLIC_REALTIME_URL`
 - `EXPO_PUBLIC_REALTIME_TRANSPORT`
 - `EXPO_PUBLIC_REALTIME_URL`
+
+Ya no dependen de:
+
+- `localhost`
+- `10.0.2.2`
+- una constante hardcodeada dentro de la UI
 
 Roles esperados:
 
@@ -57,10 +68,11 @@ PORT=4000
 Genera Prisma:
 
 ```bash
-cd apps/server
-npx prisma generate
-cd ../..
+pnpm --filter @dado-triple/db prisma:generate
 ```
+
+Si vas a usar el dashboard administrativo de `apps/web`, define también `DATABASE_URL` en
+`apps/web/.env`.
 
 ## Desarrollo
 
@@ -68,6 +80,20 @@ Para levantar el monorepo:
 
 ```bash
 pnpm dev
+```
+
+Ese comando levanta:
+
+- `apps/web`
+- `apps/server`
+- `apps/mobile`
+
+Si ya tienes otro `next dev` abierto en `apps/web`, cierralo antes o `pnpm dev` fallara por servidor duplicado.
+
+Si solo quieres backend y web:
+
+```bash
+pnpm dev:no-mobile
 ```
 
 Servicios locales:
@@ -80,6 +106,7 @@ Importante:
 
 - aunque levantes el monorepo localmente, web y mobile seguiran conectando al WebSocket distribuido en AWS
 - la guia operativa del servicio Rust y `systemd` esta en [docs/WEBSOCKET_DISTRIBUIDO.md](./docs/WEBSOCKET_DISTRIBUIDO.md)
+- si AWS vuelve a rotar la IP publica, actualiza los `.env` de `apps/web` y `apps/mobile`; con Elastic IP ese cambio deja de ser recurrente
 
 ## Testing
 
@@ -92,3 +119,33 @@ pnpm --filter @dado-triple/web exec tsc --noEmit --pretty false
 pnpm --filter @dado-triple/server test -- socket-flow.test.ts
 pnpm --filter @dado-triple/web test -- visitor-view.spec.ts
 ```
+
+## Deploy
+
+### Web en Vercel
+
+```bash
+pnpm deploy:web
+```
+
+Requiere haber hecho `vercel login` al menos una vez y configurar el proyecto apuntando a `apps/web`.
+
+### Server en Render
+
+El repo incluye `render.yaml` para desplegar `apps/server` como servicio web Node.
+
+Variables requeridas en Render:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `PORT=4000`
+
+### Mobile instalable
+
+Para generar un APK instalable de Android:
+
+```bash
+pnpm mobile:build:android:preview
+```
+
+Ese build usa EAS y produce un APK que puedes instalar en el telefono. Una vez instalado, la app se abre desde el icono como cualquier otra app, sin volver a usar `expo start`.
