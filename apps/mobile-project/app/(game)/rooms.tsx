@@ -23,7 +23,7 @@ export default function RoomsScreen() {
   const router = useRouter();
   const { client, isConnected } = useRealtime();
   const { state, dispatch } = useGameState();
-  const { playerName } = useAuthContext();
+  const { playerName, logout } = useAuthContext();
   const [isLoading, setIsLoading] = useState(true);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [maxRounds, setMaxRounds] = useState('5');
@@ -84,12 +84,19 @@ export default function RoomsScreen() {
         playerName,
       });
 
-      // Navigate after brief delay for server processing
-      setTimeout(() => {
-        router.push({ pathname: '/game', params: { roomId } } as never);
-      }, 500);
+      router.push({ pathname: '/game', params: { roomId } } as never);
     } catch {
       Alert.alert('Error', 'Failed to join room');
+    }
+  };
+
+  const handleSwitchPlayer = async () => {
+    try {
+      dispatch({ type: 'RESET_GAME' });
+      await logout();
+      router.replace('/login' as never);
+    } catch {
+      Alert.alert('Error', 'Failed to switch player');
     }
   };
 
@@ -140,6 +147,19 @@ export default function RoomsScreen() {
       <View style={styles.backgroundGlowBottom} />
 
       <View style={styles.headerBlock}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.playerBadge}>
+            <ThemedText darkColor="#D9FBFF" lightColor="#0B1F2A" style={styles.playerBadgeText}>
+              {playerName ? `Player: ${playerName}` : 'Player not set'}
+            </ThemedText>
+          </View>
+          <TouchableOpacity onPress={handleSwitchPlayer} style={styles.switchPlayerButton}>
+            <ThemedText darkColor="#041017" lightColor="#041017" style={styles.switchPlayerButtonText}>
+              Change Player
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+
         <ThemedText darkColor="#7BF7FF" lightColor="#0A7EA4" style={styles.kicker}>
           ACTIVE MATCH NETWORK
         </ThemedText>
@@ -258,6 +278,40 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     marginBottom: 10,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  playerBadge: {
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: 'rgba(16, 31, 46, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 247, 255, 0.18)',
+  },
+  playerBadgeText: {
+    fontSize: 12,
+    fontFamily: Fonts.mono,
+    letterSpacing: 0.8,
+  },
+  switchPlayerButton: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#7BF7FF',
+  },
+  switchPlayerButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: Fonts.mono,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   kicker: {
     fontFamily: Fonts.mono,

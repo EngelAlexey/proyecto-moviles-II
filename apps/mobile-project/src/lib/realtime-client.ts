@@ -17,6 +17,9 @@ export interface LifecycleMeta {
 
 export interface CreateRealtimeClientOptions {
   url: string;
+  connectionTimeoutMs?: number;
+  reconnectDelayMs?: number;
+  maxReconnectAttempts?: number;
   onOpen?: (meta: LifecycleMeta) => void;
   onClose?: (meta: LifecycleMeta) => void;
   onError?: (message: string, cause?: unknown) => void;
@@ -70,34 +73,102 @@ function createWebSocketClient(
   registry: ReturnType<typeof createRegistry>,
 ): RealtimeClient {
   let socket: WebSocket | null = null;
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempts = 0;
+  let isManualDisconnect = false;
+
+  const clearConnectionTimeout = () => {
+    if (!connectionTimeout) {
+      return;
+    }
+
+    clearTimeout(connectionTimeout);
+    connectionTimeout = null;
+  };
+
+  const clearReconnectTimeout = () => {
+    if (!reconnectTimeout) {
+      return;
+    }
+
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  };
+
+  const scheduleReconnect = (reason: string) => {
+    if (isManualDisconnect || reconnectTimeout) {
+      return;
+    }
+
+    const maxReconnectAttempts = options.maxReconnectAttempts ?? 0;
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      options.onError?.(
+        `Se agotaron los intentos de reconexion WebSocket. Ultimo motivo: ${reason}`,
+      );
+      return;
+    }
+
+    reconnectAttempts += 1;
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      connect();
+    }, options.reconnectDelayMs ?? 0);
+  };
 
   const connect = () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    socket = new WebSocket(options.url);
+    isManualDisconnect = false;
+    clearConnectionTimeout();
 
-    socket.onopen = () => {
+    const nextSocket = new WebSocket(options.url);
+    socket = nextSocket;
+
+    const timeoutMs = options.connectionTimeoutMs ?? 0;
+    if (timeoutMs > 0) {
+      connectionTimeout = setTimeout(() => {
+        if (socket === nextSocket && nextSocket.readyState === WebSocket.CONNECTING) {
+          options.onError?.('La conexion WebSocket excedio el tiempo limite de espera.');
+          nextSocket.close(4000, 'connection-timeout');
+        }
+      }, timeoutMs);
+    }
+
+    nextSocket.onopen = () => {
+      clearConnectionTimeout();
+      clearReconnectTimeout();
+      reconnectAttempts = 0;
       options.onOpen?.({
         transport: 'websocket',
         connectionId: null,
       });
     };
 
-    socket.onclose = (event) => {
+    nextSocket.onclose = (event) => {
+      if (socket === nextSocket) {
+        socket = null;
+      }
+
+      clearConnectionTimeout();
+
+      const reason = event.reason || `closed-${event.code}`;
       options.onClose?.({
         transport: 'websocket',
         connectionId: null,
-        reason: event.reason || 'closed',
+        reason,
       });
+
+      scheduleReconnect(reason);
     };
 
-    socket.onerror = (event) => {
+    nextSocket.onerror = (event) => {
       options.onError?.('No fue posible conectar con el WebSocket nativo.', event);
     };
 
-    socket.onmessage = (event) => {
+    nextSocket.onmessage = (event) => {
       const raw = typeof event.data === 'string' ? event.data : String(event.data);
       const parsed = parseSocketMessage(raw);
 
@@ -120,6 +191,10 @@ function createWebSocketClient(
   return {
     connect,
     disconnect: (code, reason) => {
+      isManualDisconnect = true;
+      clearConnectionTimeout();
+      clearReconnectTimeout();
+
       socket?.close(code, reason);
       socket = null;
     },

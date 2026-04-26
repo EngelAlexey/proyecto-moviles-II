@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -20,7 +20,13 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { setPlayerName: savePlayerName } = useAuthContext();
+  const { playerName: storedPlayerName, setPlayerName: savePlayerName } = useAuthContext();
+
+  useEffect(() => {
+    if (storedPlayerName) {
+      setPlayerName(storedPlayerName);
+    }
+  }, [storedPlayerName]);
 
   const handleJoin = async () => {
     if (!playerName.trim()) {
@@ -91,6 +97,12 @@ export default function LoginScreen() {
               </ThemedText>
             ) : null}
 
+            {storedPlayerName ? (
+              <ThemedText darkColor="#96B6C7" lightColor="#48697D" style={styles.helperText}>
+                Stored player: {storedPlayerName}. You can keep it or replace it before entering.
+              </ThemedText>
+            ) : null}
+
             <TouchableOpacity
               onPress={handleJoin}
               disabled={isLoading}
@@ -99,7 +111,7 @@ export default function LoginScreen() {
               {isLoading ? (
                 <ActivityIndicator color="#041017" />
               ) : (
-                <Text style={styles.primaryButtonText}>Join Game</Text>
+                <Text style={styles.primaryButtonText}>Enter Lobby</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -198,6 +210,11 @@ const styles = StyleSheet.create({
   errorText: {
     marginBottom: 14,
     fontSize: 14,
+  },
+  helperText: {
+    marginBottom: 14,
+    fontSize: 13,
+    lineHeight: 18,
   },
   primaryButton: {
     backgroundColor: '#7BF7FF',

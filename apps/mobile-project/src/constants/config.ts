@@ -1,4 +1,4 @@
-export const SERVER_URL = 'ws://18.218.158.112:5000';
+export const SERVER_URL = 'ws://3.142.78.130:5000';
 export const CONNECTION_TIMEOUT_MS = 5000;
 export const RECONNECT_DELAY_MS = 2000;
 export const MAX_RECONNECT_ATTEMPTS = 5;
