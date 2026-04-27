@@ -6,7 +6,7 @@ import {
   type LifecycleMeta,
   type RealtimeClient,
 } from '../lib/realtime-client';
-import { SERVER_URL } from '../constants/config';
+import { REALTIME_SERVER_URL } from '../lib/realtime-config';
 
 export interface RealtimeContextValue {
   client: RealtimeClient | null;
@@ -27,7 +27,7 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
 
   useEffect(() => {
     const rtClient = createRealtimeClient({
-      url: SERVER_URL,
+      url: REALTIME_SERVER_URL,
       onOpen: (): void => {
         setIsConnected(true);
         setConnectionError(null);

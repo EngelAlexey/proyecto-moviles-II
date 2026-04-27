@@ -71,6 +71,7 @@ function createWebSocketClient(
   registry: ReturnType<typeof createRegistry>,
 ): RealtimeClient {
   let socket: WebSocket | null = null;
+  let connectionId: string | null = null;
 
   const connect = () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -80,9 +81,10 @@ function createWebSocketClient(
     socket = new WebSocket(options.url);
 
     socket.onopen = () => {
+      connectionId = createConnectionId();
       options.onOpen?.({
         transport: 'websocket',
-        connectionId: null,
+        connectionId,
         url: options.url,
       });
     };
@@ -90,10 +92,11 @@ function createWebSocketClient(
     socket.onclose = (event: any) => {
       options.onClose?.({
         transport: 'websocket',
-        connectionId: null,
+        connectionId,
         reason: formatWebSocketCloseReason(event),
         url: options.url,
       });
+      connectionId = null;
     };
 
     socket.onerror = (event: any) => {
@@ -126,7 +129,7 @@ function createWebSocketClient(
       socket?.close(code, reason);
       socket = null;
     },
-    getConnectionId: () => null,
+    getConnectionId: () => connectionId,
     on: (event, listener) => registry.on(event, listener),
     send: (event, payload) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -142,6 +145,16 @@ function createWebSocketClient(
       socket.send(serializeSocketMessage(message));
     },
   };
+}
+
+function createConnectionId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.();
+
+  if (randomUUID) {
+    return `ws-${randomUUID.slice(0, 8)}`;
+  }
+
+  return `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function formatWebSocketCloseReason(event: { code?: number; reason?: string } | undefined): string {
