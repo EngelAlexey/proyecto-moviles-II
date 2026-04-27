@@ -34,13 +34,10 @@ import {
   type RoomsListPayload,
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
+import { REALTIME_SERVER_URL } from '@/lib/realtime-config';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
 
-const DEFAULT_REALTIME_URL = 'ws://3.142.78.130:5000';
-
-function resolveRealtimeUrl(): string {
-  return process.env.NEXT_PUBLIC_REALTIME_URL?.trim() || DEFAULT_REALTIME_URL;
-}
+const ROOMS_AUTO_REFRESH_MS = 5000;
 
 function timestamp(): string {
   return new Date().toLocaleTimeString();
@@ -60,15 +57,22 @@ export default function ObserverWebPage() {
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const pendingAutoObserveCreatedRoomRef = useRef(false);
+  const silentRoomsListResponsesRef = useRef(0);
 
   const addLog = useCallback((entry: string) => {
     setLogs((prev) => [...prev, `[${timestamp()}] ${entry}`]);
   }, []);
 
   const requestRooms = useCallback(
-    (client: RealtimeClient) => {
+    (client: RealtimeClient, options?: { silent?: boolean }) => {
+      if (options?.silent) {
+        silentRoomsListResponsesRef.current += 1;
+      }
+
       client.send(SocketEvents.LIST_ROOMS, { includeFinished: true });
-      addLog('-> LIST_ROOMS emitido');
+      if (!options?.silent) {
+        addLog('-> LIST_ROOMS emitido');
+      }
     },
     [addLog],
   );
@@ -109,7 +113,7 @@ export default function ObserverWebPage() {
   }, [addLog, isConnected, roomId, socket]);
 
   useEffect(() => {
-    setServerUrl(resolveRealtimeUrl());
+    setServerUrl(REALTIME_SERVER_URL);
   }, []);
 
   useEffect(() => {
@@ -119,13 +123,18 @@ export default function ObserverWebPage() {
 
     const client = createRealtimeClient({
       url: serverUrl,
-      onOpen: ({ connectionId: nextConnectionId, transport }) => {
+      onOpen: ({ transport }) => {
         setIsConnected(true);
-        setConnectionId(nextConnectionId);
-        addLog(`CONECTADO via ${transport}${nextConnectionId ? ` (id: ${nextConnectionId})` : ''}`);
+        setConnectionId(null);
+        addLog(`CONECTADO via ${transport}`);
         requestRooms(client);
       },
+      onConnectionId: (nextConnectionId) => {
+        setConnectionId(nextConnectionId);
+        addLog(`CONNECTION_ACK: ${nextConnectionId}`);
+      },
       onClose: ({ reason, transport }) => {
+        silentRoomsListResponsesRef.current = 0;
         setIsConnected(false);
         setConnectionId(null);
         addLog(`DESCONECTADO via ${transport}: ${reason ?? 'sin detalle'}`);
@@ -147,11 +156,20 @@ export default function ObserverWebPage() {
 
         if (pendingAutoObserveCreatedRoomRef.current) {
           pendingAutoObserveCreatedRoomRef.current = false;
-          joinAsObserver(data.room.roomId, client);
+          setObservedRoomId(data.room.roomId);
+          setIsModalOpen(true);
+          setGameState(null);
+          client.send(SocketEvents.JOIN_AS_OBSERVER, { roomId: data.room.roomId });
+          addLog(`-> JOIN_AS_OBSERVER emitido (sala: ${data.room.roomId})`);
         }
       }),
       client.on(SocketEvents.ROOMS_LIST, (data: RoomsListPayload) => {
         setRooms(data.rooms);
+        if (silentRoomsListResponsesRef.current > 0) {
+          silentRoomsListResponsesRef.current -= 1;
+          return;
+        }
+
         addLog(`ROOMS_LIST: ${data.rooms.length} sala(s) disponibles`);
       }),
       client.on(SocketEvents.PLAYER_JOINED, (data: PlayerJoinedPayload) => {
@@ -203,6 +221,32 @@ export default function ObserverWebPage() {
       client.disconnect(1000, 'Component unmounted');
     };
   }, [addLog, requestRooms, serverUrl]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) {
+      return;
+    }
+
+    const refreshRooms = () => {
+      if (document.visibilityState === 'visible') {
+        requestRooms(socket, { silent: true });
+      }
+    };
+
+    const intervalId = window.setInterval(refreshRooms, ROOMS_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshRooms();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isConnected, requestRooms, socket]);
 
   useEffect(() => {
     if (logsContainerRef.current) {

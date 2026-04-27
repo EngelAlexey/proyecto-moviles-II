@@ -83,6 +83,7 @@ export enum SocketEvents {
   ROLL_DICE = "roll_dice",
 
   // Servidor → Cliente
+  CONNECTION_ACK = "connection_ack",
   ROOM_CREATED = "room_created",
   ROOMS_LIST = "rooms_list",
   PLAYER_JOINED = "player_joined",
@@ -106,6 +107,7 @@ export const CLIENT_SOCKET_EVENTS = [
 ] as const;
 
 export const SERVER_SOCKET_EVENTS = [
+  SocketEvents.CONNECTION_ACK,
   SocketEvents.ROOM_CREATED,
   SocketEvents.ROOMS_LIST,
   SocketEvents.PLAYER_JOINED,
@@ -148,6 +150,10 @@ export interface RoomCreatedPayload {
 
 export interface RoomsListPayload {
   rooms: RoomSummary[];
+}
+
+export interface ConnectionAckPayload {
+  connectionId: string;
 }
 
 /** Servidor notifica que un jugador se unió. */
@@ -205,6 +211,7 @@ export interface ClientSocketEventMap {
 }
 
 export interface ServerSocketEventMap {
+  [SocketEvents.CONNECTION_ACK]: ConnectionAckPayload;
   [SocketEvents.ROOM_CREATED]: RoomCreatedPayload;
   [SocketEvents.ROOMS_LIST]: RoomsListPayload;
   [SocketEvents.PLAYER_JOINED]: PlayerJoinedPayload;

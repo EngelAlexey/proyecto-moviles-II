@@ -226,6 +226,31 @@ describe("Socket Integration Flow", () => {
     }
   });
 
+  test("create_room broadcasts an updated rooms list to connected observers", async () => {
+    const observer = createClient();
+    const creator = createClient();
+    const roomId = "room-broadcast";
+
+    try {
+      const initialRoomsList = waitForEvent<RoomsListPayload>(observer, SocketEvents.ROOMS_LIST);
+      observer.emit(SocketEvents.LIST_ROOMS, { includeFinished: true });
+      await initialRoomsList;
+
+      const broadcastRoomsList = waitForEvent<RoomsListPayload>(observer, SocketEvents.ROOMS_LIST);
+      const roomCreated = waitForEvent<RoomCreatedPayload>(creator, SocketEvents.ROOM_CREATED);
+
+      creator.emit(SocketEvents.CREATE_ROOM, { roomId });
+
+      const [created, roomsList] = await Promise.all([roomCreated, broadcastRoomsList]);
+
+      expect(created.room.roomId).toBe(roomId);
+      expect(roomsList.rooms.some((room) => room.roomId === roomId)).toBe(true);
+    } finally {
+      observer.disconnect();
+      creator.disconnect();
+    }
+  });
+
   test("the round advances after all active players roll", async () => {
     const realtime = new RealtimeEventService(coordinator);
     const roomId = "room-rounds";

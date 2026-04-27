@@ -33,6 +33,9 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
         setConnectionError(null);
         console.log('[Realtime] Connected to server');
       },
+      onConnectionId: (connectionId): void => {
+        console.log('[Realtime] Connection ID:', connectionId);
+      },
       onClose: (meta: LifecycleMeta): void => {
         setIsConnected(false);
         console.log('[Realtime] Disconnected:', meta.reason);

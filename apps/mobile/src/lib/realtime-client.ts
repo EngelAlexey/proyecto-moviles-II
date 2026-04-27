@@ -20,6 +20,7 @@ export interface CreateRealtimeClientOptions {
   url: string;
   onOpen?: (meta: LifecycleMeta) => void;
   onClose?: (meta: LifecycleMeta) => void;
+  onConnectionId?: (connectionId: string) => void;
   onError?: (message: string, cause?: unknown) => void;
 }
 
@@ -81,10 +82,9 @@ function createWebSocketClient(
     socket = new WebSocket(options.url);
 
     socket.onopen = () => {
-      connectionId = createConnectionId();
       options.onOpen?.({
         transport: 'websocket',
-        connectionId,
+        connectionId: null,
         url: options.url,
       });
     };
@@ -116,6 +116,14 @@ function createWebSocketClient(
         return;
       }
 
+      if (parsed.event === 'connection_ack') {
+        const payload = parsed.payload as { connectionId?: unknown };
+        if (typeof payload.connectionId === 'string' && payload.connectionId.trim()) {
+          connectionId = payload.connectionId;
+          options.onConnectionId?.(connectionId);
+        }
+      }
+
       registry.emit(
         parsed.event as ServerSocketEvent,
         parsed.payload as ServerSocketEventMap[ServerSocketEvent],
@@ -145,16 +153,6 @@ function createWebSocketClient(
       socket.send(serializeSocketMessage(message));
     },
   };
-}
-
-function createConnectionId(): string {
-  const randomUUID = globalThis.crypto?.randomUUID?.();
-
-  if (randomUUID) {
-    return `ws-${randomUUID.slice(0, 8)}`;
-  }
-
-  return `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function formatWebSocketCloseReason(event: { code?: number; reason?: string } | undefined): string {

@@ -26,6 +26,10 @@ export type OutboundEffect =
       message: ServerSocketMessage;
     }
   | {
+      scope: "all";
+      message: ServerSocketMessage;
+    }
+  | {
       scope: "room";
       roomId: string;
       message: ServerSocketMessage;
@@ -109,6 +113,7 @@ export class RealtimeEventService {
 
     const maxRounds = this.normalizeMaxRounds(payload.maxRounds);
     const state = await this.coordinator.createSession(roomId, maxRounds);
+    const rooms = await this.listRooms(false);
 
     return {
       effects: [
@@ -116,6 +121,7 @@ export class RealtimeEventService {
           room: this.toRoomSummary(roomId, state),
           state,
         }),
+        this.toAll(SocketEvents.ROOMS_LIST, { rooms }),
       ],
     };
   }
@@ -401,6 +407,16 @@ export class RealtimeEventService {
     return {
       scope: "room",
       roomId,
+      message: { event, payload } as ServerSocketMessage,
+    };
+  }
+
+  private toAll<Event extends keyof ServerSocketEventMap>(
+    event: Event,
+    payload: ServerSocketEventMap[Event],
+  ): OutboundEffect {
+    return {
+      scope: "all",
       message: { event, payload } as ServerSocketMessage,
     };
   }
