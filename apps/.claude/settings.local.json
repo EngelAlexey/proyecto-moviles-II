@@ -4,7 +4,9 @@
       "Bash(npx tsc *)",
       "Bash(pnpm add *)",
       "Bash(xargs wc *)",
-      "Bash(xargs ls *)"
+      "Bash(xargs ls *)",
+      "Bash(node -e ' *)",
+      "Bash(pnpm install *)"
     ]
   }
 }
