@@ -175,9 +175,6 @@ importers:
       socket.io:
         specifier: latest
         version: 4.8.3
-      ws:
-        specifier: ^8.20.0
-        version: 8.20.0
     devDependencies:
       '@dado-triple/typescript-config':
         specifier: workspace:*
