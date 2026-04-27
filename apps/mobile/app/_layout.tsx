@@ -8,7 +8,7 @@ import { RealtimeProvider } from '../src/context/realtime-context';
 import { useColorScheme } from '../hooks/use-color-scheme';
 
 function RootLayoutNav() {
-  const { playerName, isLoading } = useAuthContext();
+  const { isLoading } = useAuthContext();
 
   if (isLoading) {
     return null; // Show splash screen
@@ -16,21 +16,18 @@ function RootLayoutNav() {
 
   return (
     <Stack>
-      {!playerName ? (
-        <Stack.Screen
-          name="(auth)"
-          options={{
-            headerShown: false,
-          }}
-        />
-      ) : (
-        <Stack.Screen
-          name="(game)"
-          options={{
-            headerShown: false,
-          }}
-        />
-      )}
+      <Stack.Screen
+        name="(auth)"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="(game)"
+        options={{
+          headerShown: false,
+        }}
+      />
       <Stack.Screen
         name="modal"
         options={{

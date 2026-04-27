@@ -2,11 +2,16 @@
 
 import React, { ReactNode, useEffect, useState } from 'react';
 import {
+  CONNECTION_TIMEOUT_MS,
+  MAX_RECONNECT_ATTEMPTS,
+  RECONNECT_DELAY_MS,
+  SERVER_URL,
+} from '../constants/config';
+import {
   createRealtimeClient,
   type LifecycleMeta,
   type RealtimeClient,
 } from '../lib/realtime-client';
-import { SERVER_URL } from '../constants/config';
 
 export interface RealtimeContextValue {
   client: RealtimeClient | null;
@@ -28,6 +33,9 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
   useEffect(() => {
     const rtClient = createRealtimeClient({
       url: SERVER_URL,
+      connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
+      reconnectDelayMs: RECONNECT_DELAY_MS,
+      maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
       onOpen: (): void => {
         setIsConnected(true);
         setConnectionError(null);
