@@ -12,6 +12,7 @@ import {
   type LifecycleMeta,
   type RealtimeClient,
 } from '../lib/realtime-client';
+import { REALTIME_SERVER_URL } from '../lib/realtime-config';
 
 export interface RealtimeContextValue {
   client: RealtimeClient | null;
@@ -32,6 +33,7 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
 
   useEffect(() => {
     const rtClient = createRealtimeClient({
+      url: REALTIME_SERVER_URL,
       url: SERVER_URL,
       connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
       reconnectDelayMs: RECONNECT_DELAY_MS,
@@ -40,6 +42,9 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
         setIsConnected(true);
         setConnectionError(null);
         console.log('[Realtime] Connected to server');
+      },
+      onConnectionId: (connectionId): void => {
+        console.log('[Realtime] Connection ID:', connectionId);
       },
       onClose: (meta: LifecycleMeta): void => {
         setIsConnected(false);

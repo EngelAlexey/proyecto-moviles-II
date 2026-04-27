@@ -120,6 +120,11 @@ export class SocketHandler {
         continue;
       }
 
+      if (effect.scope === "all") {
+        this.io.emit(effect.message.event, effect.message.payload);
+        continue;
+      }
+
       this.io.to(effect.roomId).emit(effect.message.event, effect.message.payload);
     }
   }

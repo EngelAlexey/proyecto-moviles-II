@@ -23,6 +23,7 @@ export interface CreateRealtimeClientOptions {
   maxReconnectAttempts?: number;
   onOpen?: (meta: LifecycleMeta) => void;
   onClose?: (meta: LifecycleMeta) => void;
+  onConnectionId?: (connectionId: string) => void;
   onError?: (message: string, cause?: unknown) => void;
 }
 
@@ -74,6 +75,7 @@ function createWebSocketClient(
   registry: ReturnType<typeof createRegistry>,
 ): RealtimeClient {
   let socket: WebSocket | null = null;
+  let connectionId: string | null = null;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
@@ -159,6 +161,11 @@ function createWebSocketClient(
       const reason = formatWebSocketCloseReason(event);
       options.onClose?.({
         transport: 'websocket',
+        connectionId,
+        reason: formatWebSocketCloseReason(event),
+        url: options.url,
+      });
+      connectionId = null;
         connectionId: null,
         reason,
         url: options.url,
@@ -184,6 +191,14 @@ function createWebSocketClient(
         return;
       }
 
+      if (parsed.event === 'connection_ack') {
+        const payload = parsed.payload as { connectionId?: unknown };
+        if (typeof payload.connectionId === 'string' && payload.connectionId.trim()) {
+          connectionId = payload.connectionId;
+          options.onConnectionId?.(connectionId);
+        }
+      }
+
       registry.emit(
         parsed.event as ServerSocketEvent,
         parsed.payload as ServerSocketEventMap[ServerSocketEvent],
@@ -201,7 +216,7 @@ function createWebSocketClient(
       socket?.close(code, reason);
       socket = null;
     },
-    getConnectionId: () => null,
+    getConnectionId: () => connectionId,
     on: (event, listener) => registry.on(event, listener),
     send: (event, payload) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) {

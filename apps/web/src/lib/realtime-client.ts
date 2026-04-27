@@ -19,6 +19,7 @@ export interface CreateRealtimeClientOptions {
   url: string;
   onOpen?: (meta: LifecycleMeta) => void;
   onClose?: (meta: LifecycleMeta) => void;
+  onConnectionId?: (connectionId: string) => void;
   onError?: (message: string, cause?: unknown) => void;
 }
 
@@ -70,6 +71,7 @@ function createWebSocketClient(
   registry: ReturnType<typeof createRegistry>,
 ): RealtimeClient {
   let socket: WebSocket | null = null;
+  let connectionId: string | null = null;
 
   const connect = () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -88,9 +90,10 @@ function createWebSocketClient(
     socket.onclose = (event) => {
       options.onClose?.({
         transport: 'websocket',
-        connectionId: null,
+        connectionId,
         reason: event.reason || 'closed',
       });
+      connectionId = null;
     };
 
     socket.onerror = (event) => {
@@ -110,6 +113,14 @@ function createWebSocketClient(
         return;
       }
 
+      if (parsed.event === 'connection_ack') {
+        const payload = parsed.payload as { connectionId?: unknown };
+        if (typeof payload.connectionId === 'string' && payload.connectionId.trim()) {
+          connectionId = payload.connectionId;
+          options.onConnectionId?.(connectionId);
+        }
+      }
+
       registry.emit(
         parsed.event as ServerSocketEvent,
         parsed.payload as ServerSocketEventMap[ServerSocketEvent],
@@ -123,7 +134,7 @@ function createWebSocketClient(
       socket?.close(code, reason);
       socket = null;
     },
-    getConnectionId: () => null,
+    getConnectionId: () => connectionId,
     on: (event, listener) => registry.on(event, listener),
     send: (event, payload) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) {
