@@ -25,15 +25,23 @@ import { useRealtime } from '../../src/hooks/use-realtime';
 import { useSocketEvents } from '../../src/hooks/use-socket-events';
 import { Fonts } from '../../constants/theme';
 
+const MIN_REQUIRED_PLAYERS = 2;
+
 export default function GameScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const router = useRouter();
-  const { client } = useRealtime();
+  const { client, isConnected, connectionError } = useRealtime();
   const { state, dispatch } = useGameState();
   const { playerName } = useAuthContext();
   const [isRolling, setIsRolling] = useState(false);
   const [isReadyPending, setIsReadyPending] = useState(false);
+  const [observedRollPlayerIds, setObservedRollPlayerIds] = useState<string[]>([]);
   const [roundTransitionMessage, setRoundTransitionMessage] = useState<{
+    title: string;
+    subtitle: string;
+  } | null>(null);
+  const [connectionBanner, setConnectionBanner] = useState<{
+    tone: 'info' | 'success';
     title: string;
     subtitle: string;
   } | null>(null);
@@ -46,6 +54,7 @@ export default function GameScreen() {
         players: payload.state.players,
         pairs: payload.state.pairs,
         byePlayerId: payload.state.byePlayerId,
+        currentTurnPlayerId: payload.state.currentTurnPlayerId,
         status: payload.state.status,
         round: payload.state.round,
         maxRounds: payload.state.maxRounds,
@@ -71,12 +80,16 @@ export default function GameScreen() {
         score: payload.score,
       },
     });
+    setObservedRollPlayerIds((currentIds) =>
+      currentIds.includes(payload.playerId) ? currentIds : [...currentIds, payload.playerId],
+    );
     setIsRolling(false);
   });
 
   // Listen for game start
   useSocketEvents(SocketEvents.GAME_START, () => {
     dispatch({ type: 'GAME_START' });
+    setObservedRollPlayerIds([]);
     setIsReadyPending(false);
   });
 
@@ -94,6 +107,7 @@ export default function GameScreen() {
       type: 'SET_PAIRS',
       payload: payload.pairs,
     });
+    setObservedRollPlayerIds([]);
 
     if (payload.round > 1) {
       setRoundTransitionMessage({
@@ -112,25 +126,67 @@ export default function GameScreen() {
         winnerId: payload.winnerId,
       },
     });
+    setObservedRollPlayerIds([]);
     setRoundTransitionMessage(null);
   });
 
   const currentPlayer = state.players.find((p) => p.name === playerName);
+  const fallbackTurnPlayerId = state.pairs
+    .flatMap((pair) => [pair.player1Id, pair.player2Id])
+    .find((playerId) => !observedRollPlayerIds.includes(playerId)) ?? null;
+  const effectiveTurnPlayerId = state.currentTurnPlayerId ?? fallbackTurnPlayerId;
+  const currentTurnPlayer = state.players.find((player) => player.id === effectiveTurnPlayerId) ?? null;
   const effectiveCurrentPlayerIsReady = currentPlayer?.isReady ?? isReadyPending;
   const readyPlayersCount = state.players.filter((player) => player.isReady).length;
   const displayedReadyPlayersCount = readyPlayersCount + (isReadyPending && !currentPlayer?.isReady ? 1 : 0);
   const waitingPlayersCount = Math.max(state.players.length - displayedReadyPlayersCount, 0);
+  const minimumPlayersProgress = Math.min(state.players.length, MIN_REQUIRED_PLAYERS);
+  const lobbyStatusText =
+    state.players.length < MIN_REQUIRED_PLAYERS
+      ? `${displayedReadyPlayersCount} player${displayedReadyPlayersCount === 1 ? '' : 's'} ready • ${minimumPlayersProgress}/${MIN_REQUIRED_PLAYERS} minimum players in room`
+      : `${displayedReadyPlayersCount}/${state.players.length} players ready`;
   const readyButtonLabel = effectiveCurrentPlayerIsReady
     ? waitingPlayersCount > 0
       ? `Waiting for ${waitingPlayersCount} more ${waitingPlayersCount === 1 ? 'player' : 'players'}...`
       : 'Ready. Starting game...'
     : 'Mark Ready';
+  const canCurrentPlayerRoll =
+    state.status === 'playing' &&
+    !!currentPlayer &&
+    effectiveTurnPlayerId === currentPlayer.id &&
+    !isRolling;
+  const rollButtonLabel = !currentPlayer
+    ? 'Waiting for player sync'
+    : effectiveTurnPlayerId === currentPlayer.id
+      ? 'Roll Dice'
+      : currentTurnPlayer
+        ? `Waiting for ${currentTurnPlayer.name}`
+        : 'Waiting for next turn';
 
   useEffect(() => {
     if (currentPlayer?.isReady || state.status !== 'waiting') {
       setIsReadyPending(false);
     }
   }, [currentPlayer?.isReady, state.status]);
+
+  useEffect(() => {
+    if (!roomId || state.roomId === roomId) {
+      return;
+    }
+
+    dispatch({ type: 'UPDATE_GAME_STATE', payload: { roomId } });
+  }, [dispatch, roomId, state.roomId]);
+
+  useEffect(() => {
+    if (!client || !isConnected || !roomId || !playerName) {
+      return;
+    }
+
+    client.send(SocketEvents.JOIN_GAME, {
+      roomId,
+      playerName,
+    });
+  }, [client, isConnected, playerName, roomId]);
 
   useEffect(() => {
     if (!roundTransitionMessage) {
@@ -143,6 +199,39 @@ export default function GameScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [roundTransitionMessage]);
+
+  useEffect(() => {
+    if (!roomId) {
+      return;
+    }
+
+    if (!isConnected) {
+      setConnectionBanner({
+        tone: 'info',
+        title: 'Reconnecting...',
+        subtitle: connectionError ?? 'Trying to recover your link to the room.',
+      });
+      return;
+    }
+
+    setConnectionBanner({
+      tone: 'success',
+      title: 'Reconnected to room',
+      subtitle: `Connected again to ${roomId}.`,
+    });
+  }, [connectionError, isConnected, roomId]);
+
+  useEffect(() => {
+    if (!connectionBanner || connectionBanner.tone !== 'success') {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setConnectionBanner(null);
+    }, 1800);
+
+    return () => clearTimeout(timeoutId);
+  }, [connectionBanner]);
 
   const handleReady = () => {
     if (!client || !roomId || !currentPlayer) return;
@@ -211,6 +300,34 @@ export default function GameScreen() {
 
   return (
     <ThemedView style={{ flex: 1, paddingHorizontal: 16 }}>
+      {connectionBanner ? (
+        <View pointerEvents="none" style={styles.connectionBannerOverlay}>
+          <View
+            style={[
+              styles.connectionBannerCard,
+              connectionBanner.tone === 'success'
+                ? styles.connectionBannerSuccess
+                : styles.connectionBannerInfo,
+            ]}
+          >
+            <ThemedText
+              darkColor={connectionBanner.tone === 'success' ? '#041017' : '#F4FBFF'}
+              lightColor={connectionBanner.tone === 'success' ? '#041017' : '#102A43'}
+              style={styles.connectionBannerTitle}
+            >
+              {connectionBanner.title}
+            </ThemedText>
+            <ThemedText
+              darkColor={connectionBanner.tone === 'success' ? '#07303C' : '#A7C5D6'}
+              lightColor={connectionBanner.tone === 'success' ? '#07303C' : '#48697D'}
+              style={styles.connectionBannerSubtitle}
+            >
+              {connectionBanner.subtitle}
+            </ThemedText>
+          </View>
+        </View>
+      ) : null}
+
       {roundTransitionMessage ? (
         <View pointerEvents="none" style={styles.roundCompletedOverlay}>
           <View style={styles.roundCompletedCard}>
@@ -247,7 +364,7 @@ export default function GameScreen() {
             LOBBY STATUS
           </ThemedText>
           <ThemedText darkColor="#F4FBFF" lightColor="#102A43" style={styles.readyCounterValue}>
-            {displayedReadyPlayersCount}/{state.players.length} players ready
+            {lobbyStatusText}
           </ThemedText>
         </View>
         {state.players.map((player) => (
@@ -323,26 +440,33 @@ export default function GameScreen() {
         )}
 
         {state.status === 'playing' && (
+          <View style={styles.rollSection}>
           <TouchableOpacity
             onPress={handleRoll}
-            disabled={isRolling}
+            disabled={!canCurrentPlayerRoll}
             style={{
-              backgroundColor: isRolling ? '#ccc' : '#007AFF',
+              backgroundColor: canCurrentPlayerRoll ? '#007AFF' : '#1F3645',
               paddingVertical: 14,
               borderRadius: 8,
               alignItems: 'center',
               marginTop: 24,
-              marginBottom: 20,
+              marginBottom: 10,
             }}
           >
             {isRolling ? (
               <ActivityIndicator color="white" />
             ) : (
               <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
-                🎲 Roll Dice
+                🎲 {rollButtonLabel}
               </ThemedText>
             )}
           </TouchableOpacity>
+          <ThemedText darkColor="#96B6C7" lightColor="#48697D" style={styles.readyHint}>
+            {currentTurnPlayer
+              ? `${currentTurnPlayer.name} is the active player for this throw.`
+              : 'Waiting for the server to assign the next throw.'}
+          </ThemedText>
+          </View>
         )}
 
         {state.status === 'finished' && (
@@ -368,9 +492,40 @@ export default function GameScreen() {
 }
 
 const styles = StyleSheet.create({
-  roundCompletedOverlay: {
+  connectionBannerOverlay: {
     position: 'absolute',
     top: 22,
+    left: 16,
+    right: 16,
+    zIndex: 30,
+  },
+  connectionBannerCard: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+  },
+  connectionBannerInfo: {
+    backgroundColor: 'rgba(9, 19, 30, 0.96)',
+    borderColor: 'rgba(123, 247, 255, 0.22)',
+  },
+  connectionBannerSuccess: {
+    backgroundColor: '#7BF7FF',
+    borderColor: 'rgba(123, 247, 255, 0.4)',
+  },
+  connectionBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: Fonts.rounded,
+  },
+  connectionBannerSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  roundCompletedOverlay: {
+    position: 'absolute',
+    top: 92,
     left: 16,
     right: 16,
     zIndex: 20,
@@ -455,6 +610,9 @@ const styles = StyleSheet.create({
   },
   readySection: {
     marginTop: 24,
+    marginBottom: 20,
+  },
+  rollSection: {
     marginBottom: 20,
   },
   readyButton: {

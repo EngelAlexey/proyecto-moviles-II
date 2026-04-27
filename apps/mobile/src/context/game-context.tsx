@@ -20,6 +20,7 @@ export interface GameContextState {
   players: Player[];
   pairs: Pair[];
   byePlayerId: string | null;
+  currentTurnPlayerId: string | null;
   currentDice: DiceValues | null;
   status: GameStatus;
   round: number;
@@ -68,6 +69,7 @@ const initialState: GameContextState = {
   players: [],
   pairs: [],
   byePlayerId: null,
+  currentTurnPlayerId: null,
   currentDice: null,
   status: 'waiting',
   round: 0,
@@ -99,6 +101,7 @@ function gameReducer(state: GameContextState, action: GameAction): GameContextSt
         sessionId: action.payload.sessionId,
         players: action.payload.state.players,
         byePlayerId: action.payload.state.byePlayerId,
+        currentTurnPlayerId: action.payload.state.currentTurnPlayerId,
         status: action.payload.state.status,
         round: action.payload.state.round,
         maxRounds: action.payload.state.maxRounds,

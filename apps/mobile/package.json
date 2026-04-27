@@ -12,7 +12,8 @@
     "lint": "expo lint",
     "build:android:preview": "npx eas-cli@latest build --platform android --profile preview",
     "build:android:production": "npx eas-cli@latest build --platform android --profile production",
-    "build:ios:production": "npx eas-cli@latest build --platform ios --profile production"
+    "build:ios:production": "npx eas-cli@latest build --platform ios --profile production",
+    "eas-build-post-install": "cd ../../ && pnpm --filter @dado-triple/shared-types build"
   },
   "dependencies": {
     "@dado-triple/shared-types": "workspace:*",
@@ -22,6 +23,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.33",
+    "expo-updates": "~0.28.0",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
@@ -50,5 +52,6 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "packageManager": "pnpm@10.31.0"
 }
