@@ -1,4 +1,6 @@
+import { io, type Socket as SocketIOSocket } from 'socket.io-client';
 import {
+  SocketEvents,
   SERVER_SOCKET_EVENTS,
   parseSocketMessage,
   serializeSocketMessage,
@@ -65,10 +67,89 @@ function createRegistry() {
   };
 }
 
-export function createRealtimeClient(options: CreateRealtimeClientOptions): RealtimeClient {
+export function createRealtimeClient(
+  options: CreateRealtimeClientOptions,
+  transport = 'WEBSOCKET',
+): RealtimeClient {
   const registry = createRegistry();
+  if (transport.toUpperCase() === 'SOCKET.IO') {
+    return createSocketIOClient(options, registry);
+  }
   return createWebSocketClient(options, registry);
 }
+
+// ─── Socket.IO transport ──────────────────────────────────────────────────────
+
+function createSocketIOClient(
+  options: CreateRealtimeClientOptions,
+  registry: ReturnType<typeof createRegistry>,
+): RealtimeClient {
+  let socket: SocketIOSocket | null = null;
+  let connectionId: string | null = null;
+
+  const connect = () => {
+    if (socket?.connected) return;
+
+    socket = io(options.url, {
+      transports: ['websocket'],
+      timeout: options.connectionTimeoutMs ?? 30000,
+      reconnection: true,
+      reconnectionDelay: options.reconnectDelayMs ?? 3000,
+      reconnectionAttempts: options.maxReconnectAttempts ?? 10,
+    });
+
+    socket.on('connect', () => {
+      connectionId = socket?.id ?? null;
+      if (connectionId) {
+        options.onConnectionId?.(connectionId);
+      }
+      options.onOpen?.({
+        transport: 'websocket',
+        connectionId,
+        url: options.url,
+      });
+    });
+
+    socket.on('disconnect', (reason) => {
+      options.onClose?.({
+        transport: 'websocket',
+        connectionId,
+        reason,
+        url: options.url,
+      });
+      connectionId = null;
+    });
+
+    socket.on('connect_error', (err) => {
+      options.onError?.('No fue posible conectar con Socket.IO.', err);
+    });
+
+    for (const event of SERVER_SOCKET_EVENTS) {
+      socket.on(event, (payload: ServerSocketEventMap[typeof event]) => {
+        registry.emit(event as ServerSocketEvent, payload);
+      });
+    }
+  };
+
+  return {
+    connect,
+    disconnect: () => {
+      socket?.disconnect();
+      socket = null;
+    },
+    getConnectionId: () => connectionId,
+    on: (event, listener) => registry.on(event, listener),
+    send: (event, payload) => {
+      if (!socket?.connected) {
+        options.onError?.('No hay una conexion Socket.IO abierta para enviar mensajes.');
+        return;
+      }
+      socket.emit(event, payload);
+    },
+  };
+}
+
+// ─── WebSocket nativo transport ───────────────────────────────────────────────
 
 function createWebSocketClient(
   options: CreateRealtimeClientOptions,
@@ -82,27 +163,19 @@ function createWebSocketClient(
   let isManualDisconnect = false;
 
   const clearConnectionTimeout = () => {
-    if (!connectionTimeout) {
-      return;
-    }
-
+    if (!connectionTimeout) return;
     clearTimeout(connectionTimeout);
     connectionTimeout = null;
   };
 
   const clearReconnectTimeout = () => {
-    if (!reconnectTimeout) {
-      return;
-    }
-
+    if (!reconnectTimeout) return;
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   };
 
   const scheduleReconnect = (reason: string) => {
-    if (isManualDisconnect || reconnectTimeout) {
-      return;
-    }
+    if (isManualDisconnect || reconnectTimeout) return;
 
     const maxReconnectAttempts = options.maxReconnectAttempts ?? 0;
     if (reconnectAttempts >= maxReconnectAttempts) {
@@ -152,25 +225,17 @@ function createWebSocketClient(
     };
 
     nextSocket.onclose = (event: any) => {
-      if (socket === nextSocket) {
-        socket = null;
-      }
-
+      if (socket === nextSocket) socket = null;
       clearConnectionTimeout();
 
       const reason = formatWebSocketCloseReason(event);
       options.onClose?.({
         transport: 'websocket',
         connectionId,
-        reason: formatWebSocketCloseReason(event),
-        url: options.url,
-      });
-      connectionId = null;
-        connectionId: null,
         reason,
         url: options.url,
       });
-
+      connectionId = null;
       scheduleReconnect(reason);
     };
 
@@ -191,7 +256,7 @@ function createWebSocketClient(
         return;
       }
 
-      if (parsed.event === 'connection_ack') {
+      if (parsed.event === SocketEvents.CONNECTION_ACK) {
         const payload = parsed.payload as { connectionId?: unknown };
         if (typeof payload.connectionId === 'string' && payload.connectionId.trim()) {
           connectionId = payload.connectionId;
@@ -212,7 +277,6 @@ function createWebSocketClient(
       isManualDisconnect = true;
       clearConnectionTimeout();
       clearReconnectTimeout();
-
       socket?.close(code, reason);
       socket = null;
     },
@@ -223,29 +287,14 @@ function createWebSocketClient(
         options.onError?.('No hay una conexion WebSocket abierta para enviar mensajes.');
         return;
       }
-
-      const message = {
-        event,
-        payload,
-      } as ClientSocketMessage;
-
-      socket.send(serializeSocketMessage(message));
+      socket.send(serializeSocketMessage({ event, payload } as ClientSocketMessage));
     },
   };
 }
 
 function formatWebSocketCloseReason(event: { code?: number; reason?: string } | undefined): string {
-  if (!event) {
-    return 'closed';
-  }
-
-  if (event.reason) {
-    return `code ${event.code ?? 'unknown'}: ${event.reason}`;
-  }
-
-  if (typeof event.code === 'number') {
-    return `code ${event.code}`;
-  }
-
+  if (!event) return 'closed';
+  if (event.reason) return `code ${event.code ?? 'unknown'}: ${event.reason}`;
+  if (typeof event.code === 'number') return `code ${event.code}`;
   return 'closed';
 }

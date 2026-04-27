@@ -1,4 +1,4 @@
-const DEFAULT_REALTIME_URL = 'ws://3.142.78.130:5000';
+const DEFAULT_REALTIME_URL = 'wss://proyecto-moviles-ii.onrender.com';
 const DEFAULT_REALTIME_TRANSPORT = 'websocket';
 
 function normalizeTransportLabel(value: string | undefined): string {

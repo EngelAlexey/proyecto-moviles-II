@@ -34,7 +34,7 @@ import {
   type RoomsListPayload,
   type RoundResultPayload,
 } from '@dado-triple/shared-types';
-import { REALTIME_SERVER_URL } from '@/lib/realtime-config';
+import { REALTIME_SERVER_URL, REALTIME_TRANSPORT_LABEL } from '@/lib/realtime-config';
 import { createRealtimeClient, type RealtimeClient } from '@/lib/realtime-client';
 
 const ROOMS_AUTO_REFRESH_MS = 5000;
@@ -142,7 +142,7 @@ export default function ObserverWebPage() {
       onError: (message) => {
         addLog(`ERROR DE CONEXION: ${message}`);
       },
-    });
+    }, REALTIME_TRANSPORT_LABEL);
 
     const unsubscribers = [
       client.on(SocketEvents.ROOM_CREATED, (data: RoomCreatedPayload) => {

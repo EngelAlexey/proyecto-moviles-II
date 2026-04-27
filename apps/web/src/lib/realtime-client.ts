@@ -1,3 +1,4 @@
+import { io, type Socket as SocketIOSocket } from 'socket.io-client';
 import {
   SERVER_SOCKET_EVENTS,
   parseSocketMessage,
@@ -61,10 +62,76 @@ function createRegistry() {
   };
 }
 
-export function createRealtimeClient(options: CreateRealtimeClientOptions): RealtimeClient {
+export function createRealtimeClient(
+  options: CreateRealtimeClientOptions,
+  transport = 'WEBSOCKET',
+): RealtimeClient {
   const registry = createRegistry();
+  if (transport.toUpperCase() === 'SOCKET.IO') {
+    return createSocketIOClient(options, registry);
+  }
   return createWebSocketClient(options, registry);
 }
+
+// ─── Socket.IO transport ──────────────────────────────────────────────────────
+
+function createSocketIOClient(
+  options: CreateRealtimeClientOptions,
+  registry: ReturnType<typeof createRegistry>,
+): RealtimeClient {
+  let socket: SocketIOSocket | null = null;
+  let connectionId: string | null = null;
+
+  const connect = () => {
+    if (socket?.connected) return;
+
+    socket = io(options.url, {
+      transports: ['websocket'],
+    });
+
+    socket.on('connect', () => {
+      connectionId = socket?.id ?? null;
+      if (connectionId) {
+        options.onConnectionId?.(connectionId);
+      }
+      options.onOpen?.({ transport: 'websocket', connectionId });
+    });
+
+    socket.on('disconnect', (reason) => {
+      options.onClose?.({ transport: 'websocket', connectionId, reason });
+      connectionId = null;
+    });
+
+    socket.on('connect_error', (err) => {
+      options.onError?.('No fue posible conectar con Socket.IO.', err);
+    });
+
+    for (const event of SERVER_SOCKET_EVENTS) {
+      socket.on(event, (payload: ServerSocketEventMap[typeof event]) => {
+        registry.emit(event as ServerSocketEvent, payload);
+      });
+    }
+  };
+
+  return {
+    connect,
+    disconnect: () => {
+      socket?.disconnect();
+      socket = null;
+    },
+    getConnectionId: () => connectionId,
+    on: (event, listener) => registry.on(event, listener),
+    send: (event, payload) => {
+      if (!socket?.connected) {
+        options.onError?.('No hay una conexion Socket.IO abierta para enviar mensajes.');
+        return;
+      }
+      socket.emit(event, payload);
+    },
+  };
+}
+
+// ─── WebSocket nativo transport ───────────────────────────────────────────────
 
 function createWebSocketClient(
   options: CreateRealtimeClientOptions,
@@ -81,10 +148,7 @@ function createWebSocketClient(
     socket = new WebSocket(options.url);
 
     socket.onopen = () => {
-      options.onOpen?.({
-        transport: 'websocket',
-        connectionId: null,
-      });
+      options.onOpen?.({ transport: 'websocket', connectionId: null });
     };
 
     socket.onclose = (event) => {
@@ -141,13 +205,7 @@ function createWebSocketClient(
         options.onError?.('No hay una conexion WebSocket abierta para enviar mensajes.');
         return;
       }
-
-      const message = {
-        event,
-        payload,
-      } as ClientSocketMessage;
-
-      socket.send(serializeSocketMessage(message));
+      socket.send(serializeSocketMessage({ event, payload } as ClientSocketMessage));
     },
   };
 }

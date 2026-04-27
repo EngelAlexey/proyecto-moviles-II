@@ -5,14 +5,13 @@ import {
   CONNECTION_TIMEOUT_MS,
   MAX_RECONNECT_ATTEMPTS,
   RECONNECT_DELAY_MS,
-  SERVER_URL,
 } from '../constants/config';
 import {
   createRealtimeClient,
   type LifecycleMeta,
   type RealtimeClient,
 } from '../lib/realtime-client';
-import { REALTIME_SERVER_URL } from '../lib/realtime-config';
+import { REALTIME_SERVER_URL, REALTIME_TRANSPORT_LABEL } from '../lib/realtime-config';
 
 export interface RealtimeContextValue {
   client: RealtimeClient | null;
@@ -34,7 +33,6 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
   useEffect(() => {
     const rtClient = createRealtimeClient({
       url: REALTIME_SERVER_URL,
-      url: SERVER_URL,
       connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
       reconnectDelayMs: RECONNECT_DELAY_MS,
       maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
@@ -54,7 +52,7 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
         setConnectionError(message);
         console.error('[Realtime] Error:', message, cause);
       },
-    });
+    }, REALTIME_TRANSPORT_LABEL);
 
     setClient(rtClient);
     rtClient.connect();

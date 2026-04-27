@@ -7,7 +7,14 @@
       "Bash(pnpm approve-builds:*)",
       "Bash(pnpm install:*)",
       "Bash(npx prisma:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx expo *)",
+      "Bash(echo \"Expo started in background with PID $!\")",
+      "Bash(npm install *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(git rm *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
